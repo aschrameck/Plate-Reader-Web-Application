@@ -131,8 +131,8 @@ inspect_ui <- function() {
         ),
         
         checkboxInput(
-          "mark_control",
-          "Control",
+          "mark_blank",
+          "Blank",
           value = FALSE
         ),
         
@@ -480,9 +480,10 @@ server <- function(input, output, session) {
       plate$row        <- as.character(plate$row)
       plate$col        <- as.integer(plate$col)
       plate$value      <- as.numeric(plate$value)
-      plate$label      <- NA_character_
-      plate$is_control <- FALSE
-      plate$plate      <- name
+      plate$label          <- NA_character_
+      plate$is_blank     <- FALSE
+      plate$blank_groups <- replicate(nrow(plate), character(0), simplify = FALSE)
+      plate$plate          <- name
       
       plate_list[[name]] <- plate
     }
@@ -591,10 +592,42 @@ server <- function(input, output, session) {
   output$plate_preview <- renderPlot({
     req(input$active_plate)
     
-    plate <- plates()[[input$active_plate]]
+    plate <- plates()[[input$active_plate]] %>%
+      filter(!is.na(value))
     
-    # Only wells with data
-    plate <- plate[!is.na(plate$value), ]
+    # ---- STEP 1: expand wells into groups ----
+    expanded_plate <- plate %>%
+      mutate(
+        group = purrr::pmap(
+          list(is_blank, blank_groups, label),
+          function(is_blank, blank_groups, label) {
+            if (is_blank && length(blank_groups) > 0) {
+              blank_groups
+            } else if (!is.na(label)) {
+              label
+            } else {
+              "NA"
+            }
+          }
+        )
+      ) %>%
+      tidyr::unnest(group)
+    
+    # ---- STEP 2: factor rows ONCE (fix upside-down issue) ----
+    expanded_plate <- expanded_plate %>%
+      mutate(row = factor(row, levels = rev(sort(unique(row)))))
+    
+    # ---- STEP 3: compute sub-tiles for multi-group blanks ----
+    expanded_plate <- expanded_plate %>%
+      group_by(row, col) %>%
+      mutate(
+        n_groups = n(),
+        xmin = col - 0.5 + (row_number() - 1) / n_groups,
+        xmax = col - 0.5 + row_number() / n_groups,
+        ymin = as.numeric(row) - 0.5,
+        ymax = as.numeric(row) + 0.5
+      ) %>%
+      ungroup()
     
     # --- Dynamic label colors ---
     labels <- sort(unique(plate$label))
@@ -602,12 +635,15 @@ server <- function(input, output, session) {
     palette <- scales::hue_pal()(length(labels))
     names(palette) <- labels
     
-    ggplot(plate, aes(col, row)) +
-      geom_tile_pattern(
-        aes(fill = label),
+    # ---- STEP 4: plot ----
+    ggplot(expanded_plate) +
+      
+      # Blank wells (split into colored sub-tiles)
+      geom_rect_pattern(
+        data = dplyr::filter(expanded_plate, is_blank),
+        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = group),
         color = "white",
-        size = 0.8,
-        pattern = ifelse(plate$is_control, "stripe", "none"),
+        linewidth = 0.6,
         pattern_color = "grey",
         pattern_angle = 45,
         pattern_density = 0.1,
@@ -615,14 +651,29 @@ server <- function(input, output, session) {
         pattern_alpha = 0.8,
         show.legend = c(fill=TRUE, pattern=FALSE)
       ) +
-      geom_text(aes(label = round(value, 2)), size = 3) +
+      
+      # Non-blank wells (single tile)
+      geom_tile(
+        data = dplyr::filter(expanded_plate, !is_blank),
+        aes(x = col, y = row, fill = group),
+        color = "white",
+        linewidth = 0.6
+      ) +
+      
+      # Values
+      geom_text(
+        aes(x = col, y = row, label = value),
+        size = 3
+      ) +
+      
+      # Dynamic coloring
       scale_fill_manual(
         values = palette,
         na.value = "#d3d3d3"
       ) +
       coord_fixed() +
-      scale_x_continuous(expand = c(0, 0)) +
-      scale_y_discrete(limits = rev(unique(plate$row)), expand = c(0, 0)) +
+      
+      # Formatting
       theme_void() +
       theme(
         legend.position = "bottom",
@@ -634,10 +685,10 @@ server <- function(input, output, session) {
           size = 11,
           color = "grey40",
           margin = margin(t = 8)
-      )) +
+        )) +
       labs(
         fill = "Label",
-        caption = "Stripes indicate control samples"
+        caption = "Stripes indicate blanks"
       )
   })
   
@@ -680,11 +731,15 @@ server <- function(input, output, session) {
       paste(brushed$row, brushed$col)
     
     # Apply label
-    plate$label[idx] <- input$new_label
-    
-    # Apply control flag if checked
-    if (isTRUE(input$mark_control)) {
-      plate$is_control[idx] <- TRUE
+    if (isTRUE(input$mark_blank)) {
+      plate$is_blank[idx] <- TRUE
+      
+      plate$blank_groups[idx] <- lapply(
+        plate$blank_groups[idx],
+        function(x) unique(c(x, input$new_label))
+      )
+    } else {
+      plate$label[idx] <- input$new_label
     }
     
     plate_list[[input$active_plate]] <- plate
@@ -725,9 +780,10 @@ server <- function(input, output, session) {
     idx <- paste(plate$row, plate$col) %in%
       paste(brushed$row, brushed$col)
     
-    # Clear label + control flag
+    # Clear label + blank flag
     plate$label[idx] <- NA_character_
-    plate$is_control[idx] <- FALSE
+    plate$is_blank[idx] <- FALSE
+    plate$blank_groups[idx] <- list(NULL)
     
     plate_list[[input$active_plate]] <- plate
     plates(plate_list)
