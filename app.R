@@ -1,0 +1,753 @@
+library(shiny)
+library(bslib)
+library(shinyjs)
+library(readxl)
+library(tidyverse)
+library(ggpattern)
+
+# Theme
+lab_theme <- bs_theme(
+  version = 5,
+  bootswatch = "zephyr"
+)
+
+# --- UI screens ---
+upload_ui <- function() {
+  tagList(
+    
+    # Scoped CSS for upload indicator
+    tags$head(
+      tags$style(HTML("
+        /* Hide Shiny's default upload progress bar ONLY in upload section */
+        .upload-wrapper .progress {
+          display: none;
+        }
+
+        /* Right-side upload status */
+        .upload-status {
+          min-width: 100px;
+          margin-left: 3px;
+          margin-top: 8px;
+          font-size: 1rem;
+          color: #6c757d;
+          white-space: nowrap;
+        }
+        
+        .upload-status.success {
+        color: #198754;
+        font-size: 1.5rem;
+        }
+      "))
+    ),
+    
+    fluidRow(
+      column(
+        width = 8,
+        offset = 2,
+        card(
+          card_header("Upload Plate Data"),
+          card_body(
+            
+            # ---- Upload box + spinner/status ----
+            div(
+              class = "upload-wrapper",
+              style = "display: flex; align-items: center;",
+              
+              fileInput(
+                "data_files",
+                "Upload files",
+                multiple = TRUE,
+                accept = c(".csv", ".txt", ".xlsx"),
+                width = "100%"
+              ),
+              
+              div(
+                id = "upload_status",
+                class = "upload-status"
+              )
+            ),
+            
+            # ---- Helper text (tight spacing) ----
+            tags$small(
+              class = "text-muted d-block",
+              style = "margin-top: -30px; margin-left: 2px",
+              "Accepted file types: .csv, .txt, .xlsx"
+            ),
+            
+            checkboxInput(
+              "has_header",
+              "File contains headers",
+              value = TRUE
+            ),
+            
+            div(
+              style = "text-align: right;",
+              actionButton(
+                "to_inspect",
+                "Next",
+                class = "btn-primary",
+                disabled = TRUE
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+}
+
+inspect_ui <- function() {
+  fluidRow(
+    column(
+      width = 3,
+      card(
+        card_header("Plate Controls"),
+        
+        selectInput(
+          "active_plate",
+          "Select plate",
+          choices = NULL,
+        ),
+        
+        hr(),
+        
+        textInput(
+          "new_label",
+          "Label cells",
+          placeholder = "5ml, Drug A, etc."
+        ),
+        
+        actionButton(
+          "apply_label",
+          "Apply Label",
+          class = "btn-primary w-100"
+        ),
+        
+        actionButton(
+          "clear_label",
+          "Clear",
+          class = "btn-secondary w-100",
+          disabled = TRUE
+        ),
+        
+        checkboxInput(
+          "mark_control",
+          "Control",
+          value = FALSE
+        ),
+        
+        hr(),
+        
+        actionButton(
+          "inspect_ok",
+          "Next",
+          class = "btn-primary",
+          disabled = TRUE
+        )
+      )
+    ),
+    
+    column(
+      width = 9,
+      card(
+        plotOutput(
+          "plate_preview",
+          height = "500px",
+          brush = brushOpts(
+            id = "plate_brush",
+            resetOnNew = TRUE
+          )
+        )
+      )
+    )
+  )
+}
+
+normalize_ui <- function() {
+  fluidRow(
+    column(
+      width = 10,
+      offset = 1,
+      card(
+        card_header("Processed Data"),
+        card_body(
+          tableOutput("normalized_preview"),
+          br(),
+          div(
+            class = "d-flex gap-2",
+            downloadButton("download_csv", "Download CSV"),
+            downloadButton("download_prism", "Download Prism Format")
+          ),
+          hr(),
+          div(
+            class = "d-flex justify-content-between",
+            actionButton("back_to_upload", "Back"),
+            actionButton("to_analysis", "Next", class = "btn-primary")
+          )
+        )
+      )
+    )
+  )
+}
+
+analysis_ui <- function() {
+  fluidRow(
+    column(
+      width = 8,
+      offset = 2,
+      card(
+        card_header("Statistical Analysis Options"),
+        card_body(
+          # Statistical tests checkboxes
+          checkboxGroupInput(
+            "analysis_types",
+            "Statistical tests",
+            choices = c("t-test", "ANOVA", "Nonparametric test")
+          ),
+          
+          # Visualizations checkboxes
+          checkboxGroupInput(
+            "viz_types",
+            "Visualizations",
+            choices = c("Boxplot", "Bar chart", "Heatmap")
+          ),
+          
+          # Bottom row: Select All left, Run Analysis right
+          div(
+            class = "d-flex justify-content-between align-items-center mt-3",
+            
+            # Left: Select All
+            div(
+              class = "d-flex align-items-center",
+              style = "margin-top: 20px",
+              checkboxInput(
+                "analysis_select_all",
+                "Select All",
+                value = FALSE
+              )
+            ),
+            
+            # Right: Run Analysis
+            actionButton("run_analysis", "Run Analysis", class = "btn-primary")
+          )
+        )
+      )
+    )
+  )
+}
+
+results_ui <- function() {
+  fluidRow(
+    column(
+      width = 10,
+      offset = 1,
+      card(
+        card_header("Results & Downloads"),
+        card_body(
+          plotOutput("final_plots"),
+          br(),
+          div(
+            class = "d-flex gap-2 flex-wrap",
+            downloadButton("download_normalized", "Download Normalized Data"),
+            downloadButton("download_pdf", "Download PDF"),
+            downloadButton("download_teaching", "Download Teaching Document")
+          ),
+          hr(),
+          div(
+            style = "text-align: right;",
+            actionButton("start_over", "Start New Analysis", class = "btn-primary")
+          )
+        )
+      )
+    )
+  )
+}
+
+# --- Main UI ---
+ui <- fluidPage(
+  theme = lab_theme,
+  useShinyjs(),
+  
+  # Top header (persistent)
+  fluidRow(
+    class = "pt-3 pb-2",   # spacing top/bottom
+    style = "display: flex; align-items: center;",  # vertical center for all children
+    
+    # Title + dark mode toggle
+    column(
+      width = 6,
+      div(
+        class = "d-flex align-items-center gap-3",
+        h2("Plate Reader Analysis", class = "m-0"),  # remove default margin
+        input_dark_mode()
+      )
+    ),
+    
+    # Step + progress (right-aligned, fixed layout)
+    column(
+      width = 6,
+      div(
+        class = "d-flex align-items-center justify-content-end gap-3",
+        textOutput("step_label"),
+        div(
+          style = "width: 220px;",
+          uiOutput("progress_bar")
+        )
+      )
+    ),
+    
+    # Formatting
+    tags$head(
+      tags$style(HTML("
+    /* Truncate selected value */
+    .selectize-input > div {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 90%;
+      cursor: help;
+    }
+
+    /* Truncate dropdown options */
+    .selectize-dropdown .option {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  ")),
+      
+      tags$script(HTML("
+    function updatePlateTooltips() {
+      var select = $('#active_plate')[0].selectize;
+      if (!select) return;
+
+      // Selected item div
+      select.$control.children('div.item, div.single').attr('title', select.getValue());
+
+      // Each dropdown option
+      select.$dropdown_content.find('.option').each(function() {
+        var val = $(this).attr('data-value');
+        $(this).attr('title', val);
+      });
+    }
+
+    // Initial load
+    $(document).ready(function() {
+      updatePlateTooltips();
+    });
+
+    // Update on change
+    $(document).on('change', '#active_plate', function() {
+      updatePlateTooltips();
+    });
+
+    // Update when dropdown opens
+    $(document).on('click', '#active_plate + .selectize-control .selectize-input', function() {
+      updatePlateTooltips();
+    });
+  "))
+    )
+  ),
+  
+  hr(),
+  uiOutput("current_screen")
+)
+
+# --- Server ---
+server <- function(input, output, session) {
+  
+  # --- First screen: Upload ---
+  state <- reactiveValues(screen = "upload")
+  
+  allowed_ext <- c("csv", "txt", "xlsx")
+  
+  # Upload spinner
+  shinyjs::runjs("
+    $(document).on('change', '#data_files', function() {
+      $('#upload_status').html(
+        '<span class=\"spinner-border spinner-border-sm\"></span> Uploading'
+      );
+    });
+  ")
+  
+  observe({
+    if (is.null(input$data_files)) {
+      shinyjs::html("upload_status", "")
+      return()
+    }
+    
+    shinyjs::html(
+      "upload_status",
+      "<span class='upload-status success' aria-label='Upload complete'>✓</span>"
+    )
+  })
+  
+  # File validation
+  files_valid <- reactive({
+    req(input$data_files)
+    ext <- tools::file_ext(input$data_files$name)
+    if (any(!ext %in% allowed_ext)) return(FALSE)
+    if (any(input$data_files$size == 0)) return(FALSE)
+    TRUE
+  })
+  
+  observe({
+    valid <- !is.null(input$data_files) && files_valid()
+    shinyjs::toggleState("to_inspect", condition = valid)
+  })
+  
+  # ---- Plate storage ---
+  plates <- reactiveVal(list())
+  
+  observeEvent(input$data_files, {
+    req(files_valid())
+    
+    plate_list <- list()
+    
+    for (i in seq_len(nrow(input$data_files))) {
+      
+      path  <- input$data_files$datapath[i]
+      fname <- input$data_files$name[i]
+      name  <- tools::file_path_sans_ext(fname)
+      ext   <- tools::file_ext(fname)
+      
+      # Read file
+      raw <- tryCatch({
+        switch(
+          ext,
+          csv  = read.csv(path, header = FALSE, stringsAsFactors = FALSE),
+          txt  = read.delim(path, header = FALSE, stringsAsFactors = FALSE),
+          xlsx = as.data.frame(readxl::read_xlsx(path, col_names = FALSE)),
+          stop("Unsupported file type")
+        )
+      }, error = function(e) {
+        showNotification(
+          paste("Failed to read", fname, ":", e$message),
+          type = "error",
+          duration = 8
+        )
+        return(NULL)
+      })
+      
+      if (is.null(raw)) next
+      
+      raw <- as.data.frame(raw)
+      
+      # STEP 1: find blank row + blank column
+      is_blank_row <- apply(raw, 1, function(x) all(is.na(x) | x == ""))
+      is_blank_col <- apply(raw, 2, function(x) all(is.na(x) | x == ""))
+      
+      first_blank_row <- which(is_blank_row)[1]
+      first_blank_col <- which(is_blank_col)[1]
+      
+      if (is.na(first_blank_row) || is.na(first_blank_col)) {
+        showNotification(
+          paste("Could not detect plate boundary in", fname),
+          type = "error"
+        )
+        next
+      }
+      
+      # STEP 2: crop to plate area
+      plate_raw <- raw[
+        seq_len(first_blank_row - 1),
+        seq_len(first_blank_col - 1),
+        drop = FALSE
+      ]
+      
+      # STEP 3: handle headers
+      if (isTRUE(input$has_headers)) {
+        
+        col_names <- as.character(plate_raw[1, -1])
+        row_names <- as.character(plate_raw[-1, 1])
+        
+        values <- plate_raw[-1, -1, drop = FALSE]
+        
+        colnames(values) <- col_names
+        rownames(values) <- row_names
+        
+      } else {
+        
+        values <- plate_raw
+        rownames(values) <- LETTERS[seq_len(nrow(values))]
+        colnames(values) <- seq_len(ncol(values))
+      }
+      
+      # STEP 4: convert to long format
+      plate <- as.data.frame(as.table(as.matrix(values)))
+      colnames(plate) <- c("row", "col", "value")
+      
+      plate$row        <- as.character(plate$row)
+      plate$col        <- as.integer(plate$col)
+      plate$value      <- as.numeric(plate$value)
+      plate$label      <- NA_character_
+      plate$is_control <- FALSE
+      plate$plate      <- name
+      
+      plate_list[[name]] <- plate
+    }
+    
+    validate(
+      need(length(plate_list) > 0, "No valid plates could be loaded.")
+    )
+    
+    plates(plate_list)
+  })
+  
+  # --- Buttons ---
+  # Analysis page select-all
+  observeEvent(input$analysis_select_all, {
+    updateCheckboxGroupInput(
+      session,
+      "analysis_types",
+      selected = if (input$analysis_select_all)
+        c("t-test", "ANOVA", "Nonparametric test") else character(0)
+    )
+    
+    updateCheckboxGroupInput(
+      session,
+      "viz_types",
+      selected = if (input$analysis_select_all)
+        c("Boxplot", "Bar chart", "Heatmap") else character(0)
+    )
+  })
+  
+  # Navigation buttons
+  observeEvent(input$to_inspect,        { state$screen <- "inspect" })
+  observeEvent(input$inspect_ok,        { state$screen <- "normalize" })
+  observeEvent(input$back_to_upload,    { state$screen <- "upload" })
+  observeEvent(input$to_analysis,       { state$screen <- "analysis" })
+  observeEvent(input$run_analysis,      { state$screen <- "results" })
+  observeEvent(input$start_over,        { state$screen <- "upload" })
+  
+  # --- Header ---
+  output$step_label <- renderText({
+    switch(
+      state$screen,
+      upload    = "Step 1/5 - Upload",
+      inspect   = "Step 2/5 - Select",
+      normalize = "Step 3/5 - Normalization",
+      analysis  = "Step 4/5 - Analysis",
+      results   = "Step 5/5 - Results"
+    )
+  })
+  
+  # Progress bar
+  output$progress_bar <- renderUI({
+    value <- switch(
+      state$screen,
+      upload    = 20,
+      inspect   = 40,
+      normalize = 60,
+      analysis  = 80,
+      results   = 100
+    )
+    
+    tags$div(
+      class = "progress w-100",
+      style = "height: 1.2rem;",
+      tags$div(
+        class = "progress-bar",
+        role = "progressbar",
+        style = sprintf("width: %d%%;", value),
+        `aria-valuenow` = value,
+        `aria-valuemin` = 0,
+        `aria-valuemax` = 100
+      )
+    )
+  })
+  
+  # --- Screen rendering ---
+  output$current_screen <- renderUI({
+    switch(
+      state$screen,
+      upload    = upload_ui(),
+      inspect   = inspect_ui(),
+      normalize = normalize_ui(),
+      analysis  = analysis_ui(),
+      results   = results_ui()
+    )
+  })
+  
+ 
+  # --- Second screen: Select ---
+  observeEvent(
+    list(state$screen, plates()),
+    {
+      req(state$screen == "inspect")
+      req(length(plates()) > 0)
+      
+      updateSelectInput(
+        session,
+        "active_plate",
+        choices  = names(plates()),
+        selected = names(plates())[1]
+      )
+    },
+    ignoreInit = TRUE
+  )
+  
+  # Plate plot
+  output$plate_preview <- renderPlot({
+    req(input$active_plate)
+    
+    plate <- plates()[[input$active_plate]]
+    
+    # Only wells with data
+    plate <- plate[!is.na(plate$value), ]
+    
+    # --- Dynamic label colors ---
+    labels <- sort(unique(plate$label))
+    if (length(labels) == 0) labels <- "dummy"
+    palette <- scales::hue_pal()(length(labels))
+    names(palette) <- labels
+    
+    ggplot(plate, aes(col, row)) +
+      geom_tile_pattern(
+        aes(fill = label),
+        color = "white",
+        size = 0.8,
+        pattern = ifelse(plate$is_control, "stripe", "none"),
+        pattern_color = "grey",
+        pattern_angle = 45,
+        pattern_density = 0.1,
+        pattern_spacing = 0.02,
+        pattern_alpha = 0.8,
+        show.legend = c(fill=TRUE, pattern=FALSE)
+      ) +
+      geom_text(aes(label = round(value, 2)), size = 3) +
+      scale_fill_manual(
+        values = palette,
+        na.value = "#d3d3d3"
+      ) +
+      coord_fixed() +
+      scale_x_continuous(expand = c(0, 0)) +
+      scale_y_discrete(limits = rev(unique(plate$row)), expand = c(0, 0)) +
+      theme_void() +
+      theme(
+        legend.position = "bottom",
+        legend.title = element_text(size = 14, face = "bold"),
+        legend.text  = element_text(size = 12),
+        plot.margin  = margin(5, 5, 5, 5),
+        plot.caption = element_text(
+          hjust = 0.5,
+          size = 11,
+          color = "grey40",
+          margin = margin(t = 8)
+      )) +
+      labs(
+        fill = "Label",
+        caption = "Stripes indicate control samples"
+      )
+  })
+  
+  # Disable next button until label applied
+  observe({
+    if (state$screen != "inspect") {
+      shinyjs::disable("inspect_ok")
+      return()
+    }
+    
+    req(input$active_plate)
+    
+    plate <- plates()[[input$active_plate]]
+    
+    has_group <- any(!is.na(plate$label))
+    
+    shinyjs::toggleState(
+      "inspect_ok",
+      condition = has_group
+    )
+  })
+  
+  # Apply label to brushed wells
+  observeEvent(input$apply_label, {
+    req(input$plate_brush, input$new_label, input$active_plate)
+    
+    plate_list <- plates()
+    plate <- plate_list[[input$active_plate]]
+    
+    brushed <- brushedPoints(
+      plate,
+      input$plate_brush,
+      xvar = "col",
+      yvar = "row"
+    )
+    
+    if (nrow(brushed) == 0) return()
+    
+    idx <- paste(plate$row, plate$col) %in%
+      paste(brushed$row, brushed$col)
+    
+    # Apply label
+    plate$label[idx] <- input$new_label
+    
+    # Apply control flag if checked
+    if (isTRUE(input$mark_control)) {
+      plate$is_control[idx] <- TRUE
+    }
+    
+    plate_list[[input$active_plate]] <- plate
+    plates(plate_list)
+  })
+  
+  # Clear Labels
+  observe({
+    # Only relevant on inspect screen
+    if (state$screen != "inspect") {
+      shinyjs::disable("clear_label")
+      return()
+    }
+    
+    has_brush <- !is.null(input$plate_brush)
+    
+    shinyjs::toggleState(
+      "clear_label",
+      condition = has_brush
+    )
+  })
+  
+  observeEvent(input$clear_label, {
+    req(input$plate_brush, input$active_plate)
+    
+    plate_list <- plates()
+    plate <- plate_list[[input$active_plate]]
+    
+    brushed <- brushedPoints(
+      plate,
+      input$plate_brush,
+      xvar = "col",
+      yvar = "row"
+    )
+    
+    if (nrow(brushed) == 0) return()
+    
+    idx <- paste(plate$row, plate$col) %in%
+      paste(brushed$row, brushed$col)
+    
+    # Clear label + control flag
+    plate$label[idx] <- NA_character_
+    plate$is_control[idx] <- FALSE
+    
+    plate_list[[input$active_plate]] <- plate
+    plates(plate_list)
+  })
+  
+  # --- Placeholders (later steps) ---
+  output$normalized_preview <- renderTable({
+    data.frame(
+      Well = c("A1", "A2", "B1"),
+      Value = c(1.2, 0.9, 1.5)
+    )
+  })
+  
+  output$final_plots <- renderPlot({
+    barplot(
+      c(2, 4, 3),
+      names.arg = c("Group 1", "Group 2", "Group 3"),
+      main = "Results Plot (Placeholder)"
+    )
+  })
+}
+
+shinyApp(ui, server)
