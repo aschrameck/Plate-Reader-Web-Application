@@ -1,0 +1,24 @@
+Package: plateReaderApp
+Type: Package
+Title: Interactive Plate Reader Analysis App
+Version: 0.1.0
+Authors@R: 
+    person("Aubrey", "Schrameck", email = "aubreyschrameck@gmail.com", role = c("aut", "cre"))
+Description: A Shiny-based interactive workflow for uploading, labeling,
+    normalizing, and analyzing multi-well plate reader data.
+License: MIT
+Encoding: UTF-8
+LazyData: true
+Imports:
+    shiny,
+    bslib,
+    shinyjs,
+    readxl,
+    dplyr,
+    tidyr,
+    purrr,
+    ggpattern,
+    scales,
+    magrittr
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
