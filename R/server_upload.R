@@ -73,6 +73,26 @@ server_upload <- function(input, output, session, state, plates) {
       # Save as data frame
       values <- as.data.frame(raw)
 
+      # ---- Crop at first completely blank row ----
+      blank_row <- apply(values, 1, function(r) {
+        all(is.na(r) | trimws(as.character(r)) == "")
+      })
+
+      if (any(blank_row)) {
+        first_blank_row <- which(blank_row)[1]
+        values <- values[seq_len(first_blank_row - 1), , drop = FALSE]
+      }
+
+      # ---- Crop at first completely blank column ----
+      blank_col <- apply(values, 2, function(c) {
+        all(is.na(c) | trimws(as.character(c)) == "")
+      })
+
+      if (any(blank_col)) {
+        first_blank_col <- which(blank_col)[1]
+        values <- values[, seq_len(first_blank_col - 1), drop = FALSE]
+      }
+
       # -- Handle headers ---
       if(isTRUE(input$has_headers)) {
         # Extract labels
@@ -111,9 +131,10 @@ server_upload <- function(input, output, session, state, plates) {
       plate$row   <- as.character(plate$row)
       plate$col   <- as.integer(plate$col)
 
-      plate$label          <- NA_character_
       plate$is_control     <- FALSE
       plate$is_blank       <- FALSE
+      plate$is_label       <- FALSE
+      plate$labels         <- replicate(nrow(plate), character(0), simplify = FALSE)
       plate$control_groups <- replicate(nrow(plate), character(0), simplify = FALSE)
       plate$blanks         <- replicate(nrow(plate), character(0), simplify = FALSE)
       plate$plate          <- name

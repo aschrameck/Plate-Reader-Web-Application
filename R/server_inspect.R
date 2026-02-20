@@ -1,41 +1,43 @@
 server_inspect <- function(input, output, session, state, plates) {
-  # --- Select plate to read ---
-  observeEvent(
-    list(state$screen, plates()),
-    {
-      req(state$screen == "inspect")
-      req(length(plates()) > 0)
+  # --- Select Plate ---
+  observeEvent(state$screen, {
+    req(state$screen == "inspect")
+    req(length(plates()) > 0)
 
-      updateSelectInput(
-        session,
-        "active_plate",
-        choices  = names(plates()),
-        selected = names(plates())[1]
-      )
-    },
-    ignoreInit = TRUE
-  )
+    updateSelectInput(
+      session,
+      "active_plate",
+      choices = names(plates())
+    )
+  })
 
   # --- Plotting ---
   output$plate_preview <- renderPlot({
     req(input$active_plate)
 
-    plate <- plates()[[input$active_plate]]
+    plate <- plates()[[input$active_plate]] %>%
+      filter(!is.na(value))
 
     # Expand wells into groups
     expanded_plate <- plate %>%
       mutate(
         group = purrr::pmap(
-          list(is_control, is_blank, control_groups, blanks, label),
-          function(is_control, is_blank, control_groups, blanks, label) {
+          list(is_control, is_blank, is_label,
+               control_groups, blanks, labels),
+          function(is_control, is_blank, is_label,
+                   control_groups, blanks, labels) {
+
             if (is_control && length(control_groups) > 0) {
               control_groups
+
             } else if (is_blank && length(blanks) > 0) {
               blanks
-            } else if (!is.na(label)) {
-              label
+
+            } else if (is_label && length(labels) > 0) {
+              labels
+
             } else {
-              "NA"
+              NA_character_
             }
           }
         )
@@ -60,18 +62,29 @@ server_inspect <- function(input, output, session, state, plates) {
 
     # Dynamic label colors
     all_labels <- unique(c(
-      na.omit(plate$label),
+      unlist(plate$labels),
       unlist(plate$control_groups),
       unlist(plate$blanks)
     ))
+
+    all_labels <- all_labels[!is.na(all_labels) & all_labels != ""]
 
     if (length(all_labels) == 0) all_labels <- "dummy"
 
     palette <- scales::hue_pal()(length(all_labels))
     names(palette) <- all_labels
 
-    # Plot settings
+    # Plotting
     ggplot(expanded_plate) +
+      # Base layer: all wells
+      geom_rect(
+        aes(xmin = xmin, xmax = xmax,
+            ymin = ymin, ymax = ymax,
+            fill = group),
+        color = "white",
+        linewidth = 0.6
+      ) +
+
       # Blanks
       geom_rect_pattern(
         data = dplyr::filter(expanded_plate, is_blank),
@@ -96,14 +109,6 @@ server_inspect <- function(input, output, session, state, plates) {
         pattern_spacing = 0.02,
         pattern_alpha = 0.8,
         show.legend = c(fill=TRUE, pattern=FALSE)
-      ) +
-
-      # Non-control wells
-      geom_tile(
-        data = dplyr::filter(expanded_plate, !is_control & !is_blank),
-        aes(x = col, y = row, fill = group),
-        color = "white",
-        linewidth = 0.6
       ) +
 
       # Values
@@ -138,7 +143,7 @@ server_inspect <- function(input, output, session, state, plates) {
       )
   })
 
-  # --- Buttons --
+  # --- Buttons ---
   # Control / Blank mutually exclusive
   observeEvent(input$mark_control, {
     if (isTRUE(input$mark_control)) {
@@ -163,7 +168,11 @@ server_inspect <- function(input, output, session, state, plates) {
 
     plate <- plates()[[input$active_plate]]
 
-    has_group <- any(!is.na(plate$label))
+    has_group <- any(
+      lengths(plate$labels) > 0 |
+        lengths(plate$control_groups) > 0 |
+        lengths(plate$blanks) > 0
+    )
 
     shinyjs::toggleState(
       "inspect_ok",
@@ -192,20 +201,27 @@ server_inspect <- function(input, output, session, state, plates) {
 
     if (isTRUE(input$mark_blank)) {
 
-      # Blanks
+      # ---- BLANK ----
       plate$is_blank[idx]   <- TRUE
       plate$is_control[idx] <- FALSE
+      plate$is_label[idx]   <- FALSE
+
       plate$control_groups[idx] <- list(character(0))
+      plate$labels[idx]         <- list(character(0))
 
       plate$blanks[idx] <- lapply(
         plate$blanks[idx],
-        function(x) unique(c(x, input$new_label)))
+        function(x) unique(c(x, input$new_label))
+      )
 
     } else if (isTRUE(input$mark_control)) {
-      # Control
+      # ---- CONTROL ----
       plate$is_control[idx] <- TRUE
       plate$is_blank[idx]   <- FALSE
-      plate$blanks[idx] <- list(character(0))
+      plate$is_label[idx]   <- FALSE
+
+      plate$blanks[idx]  <- list(character(0))
+      plate$labels[idx]  <- list(character(0))
 
       plate$control_groups[idx] <- lapply(
         plate$control_groups[idx],
@@ -214,12 +230,18 @@ server_inspect <- function(input, output, session, state, plates) {
 
     } else {
 
-      # Normal label
-      plate$label[idx]      <- input$new_label
+      # ---- NORMAL LABEL ----
       plate$is_control[idx] <- FALSE
       plate$is_blank[idx]   <- FALSE
+      plate$is_label[idx]   <- TRUE
+
       plate$control_groups[idx] <- list(character(0))
-      plate$blanks[idx] <- list(character(0))
+      plate$blanks[idx]         <- list(character(0))
+
+      plate$labels[idx] <- lapply(
+        plate$labels[idx],
+        function(x) unique(c(x, input$new_label))
+      )
     }
 
     plate_list[[input$active_plate]] <- plate
@@ -260,11 +282,14 @@ server_inspect <- function(input, output, session, state, plates) {
     idx <- paste(plate$row, plate$col) %in%
       paste(brushed$row, brushed$col)
 
-    plate$label[idx] <- NA_character_
+    # Clear label + control flag
+    plate$labels[idx]         <- list(character(0))
+    plate$control_groups[idx] <- list(character(0))
+    plate$blanks[idx]         <- list(character(0))
+
     plate$is_control[idx] <- FALSE
     plate$is_blank[idx]   <- FALSE
-    plate$control_groups[idx] <- list(NULL)
-    plate$blanks[idx] <- list(NULL)
+    plate$is_label[idx]   <- FALSE
 
     plate_list[[input$active_plate]] <- plate
     plates(plate_list)
