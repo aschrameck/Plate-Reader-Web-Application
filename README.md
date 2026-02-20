@@ -45,7 +45,10 @@ shiny::runApp("app.R")
 - Select desired statistical tests and visualizations.
 - Returns publication-ready results and teaching document.
 
+## Structure
+```
 plate-reader-web-app/
+|
 ├─ R/                       # Shiny application source files
 │   ├─ imports.R            # Package dependencies
 │   ├─ main_server.R        # Overall backend logic
@@ -61,8 +64,10 @@ plate-reader-web-app/
 │   ├─ server_normalize.R   # Data normalization backend
 │   ├─ server_results.R     # Publication-ready results backend
 │   ├─ server_upload.R      # Raw data processing backend
+|
 ├─ man/                     # Documentation
 │   ├─ run_plate_reader_app.Rd
+|
 ├─ .Rbuildignore
 ├─ .Rhistory
 ├─ .gitignore
@@ -70,3 +75,4 @@ plate-reader-web-app/
 ├─ NAMESPACE
 ├─ Project Proposal.pdf    # Written project proposal
 ├─ plateReaderApp.proj     # R directory
+```
