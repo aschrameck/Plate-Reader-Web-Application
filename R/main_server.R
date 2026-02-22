@@ -4,9 +4,60 @@ app_server <- function(input, output, session) {
   state  <- reactiveValues(screen = "upload")
   plates <- reactiveVal(list())
 
+  # ---- Shared group map ----
+  group_map <- reactive({
+
+    req(length(plates()) > 0)
+
+    purrr::imap_dfr(plates(), function(plate, plate_name) {
+
+      expanded <- plate %>%
+        dplyr::filter(!is.na(value)) %>%
+        dplyr::mutate(
+          group_list = purrr::pmap(
+            list(is_control, is_blank, is_label,
+                 control_groups, blanks, labels),
+            function(is_control, is_blank, is_label,
+                     control_groups, blanks, labels) {
+
+              if (is_control && length(control_groups) > 0) {
+                tibble::tibble(group = control_groups, role = "control")
+
+              } else if (is_blank && length(blanks) > 0) {
+                tibble::tibble(group = blanks, role = "blank")
+
+              } else if (is_label && length(labels) > 0) {
+                tibble::tibble(group = labels, role = "normal")
+
+              } else {
+                tibble::tibble(group = character(0), role = character(0))  # <--- always a tibble
+              }
+            }
+          )
+        ) %>%
+        tidyr::unnest(group_list)
+
+      if (nrow(expanded) == 0) return(NULL)
+
+      expanded %>%
+        dplyr::mutate(
+          plate = plate_name,
+          value = suppressWarnings(as.numeric(value))
+        ) %>%
+        dplyr::select(
+          plate,
+          row,
+          col,
+          value,
+          group,
+          role
+        )
+    })
+  })
+
   # ---- Navigation ----
   observeEvent(input$to_inspect,     { state$screen <- "inspect" })
-  observeEvent(input$inspect_ok,     { state$screen <- "normalize" })
+  observeEvent(input$to_normalize,   { state$screen <- "normalize" })
   observeEvent(input$back_to_upload, { state$screen <- "upload" })
   observeEvent(input$to_analysis,    { state$screen <- "analysis" })
   observeEvent(input$run_analysis,   { state$screen <- "results" })
@@ -61,7 +112,7 @@ app_server <- function(input, output, session) {
   # ---- Call screen servers ----
   server_upload(input, output, session, state, plates)
   server_inspect(input, output, session, state, plates)
-  server_normalize(input, output, session, state, plates)
+  server_normalize(input, output, session, state, plates, group_map)
   server_analysis(input, output, session, state, plates)
   server_results(input, output, session, state, plates)
 }

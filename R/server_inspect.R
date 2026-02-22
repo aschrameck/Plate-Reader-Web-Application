@@ -160,7 +160,7 @@ server_inspect <- function(input, output, session, state, plates) {
   # Disable next button until label applied
   observe({
     if (state$screen != "inspect") {
-      shinyjs::disable("inspect_ok")
+      shinyjs::disable("to_normalize")
       return()
     }
 
@@ -175,7 +175,7 @@ server_inspect <- function(input, output, session, state, plates) {
     )
 
     shinyjs::toggleState(
-      "inspect_ok",
+      "to_normalize",
       condition = has_group
     )
   })
