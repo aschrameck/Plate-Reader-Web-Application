@@ -58,10 +58,14 @@ app_server <- function(input, output, session) {
   # ---- Navigation ----
   observeEvent(input$to_inspect,     { state$screen <- "inspect" })
   observeEvent(input$to_normalize,   { state$screen <- "normalize" })
-  observeEvent(input$back_to_upload, { state$screen <- "upload" })
+  observeEvent(input$back_to_upload, { state$screen <- "upload"
+  plates(list())       # clears uploaded plates
+  })
   observeEvent(input$to_analysis,    { state$screen <- "analysis" })
   observeEvent(input$run_analysis,   { state$screen <- "results" })
-  observeEvent(input$start_over,     { state$screen <- "upload" })
+  observeEvent(input$start_over,     { state$screen <- "upload"
+  plates(list())       # clears uploaded plates
+  })
 
   # ---- Header label ----
   output$step_label <- renderText({
@@ -69,8 +73,8 @@ app_server <- function(input, output, session) {
       state$screen,
       upload    = "Step 1/5 - Upload",
       inspect   = "Step 2/5 - Select",
-      normalize = "Step 3/5 - Normalization",
-      analysis  = "Step 4/5 - Analysis",
+      normalize = "Step 3/5 - Process",
+      analysis  = "Step 4/5 - Analyze",
       results   = "Step 5/5 - Results"
     )
   })
