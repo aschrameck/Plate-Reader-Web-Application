@@ -134,10 +134,13 @@ server_upload <- function(input, output, session, state, plates) {
       plate$is_control     <- FALSE
       plate$is_blank       <- FALSE
       plate$is_label       <- FALSE
+      plate$is_standard    <- FALSE
       plate$labels         <- replicate(nrow(plate), character(0), simplify = FALSE)
       plate$control_groups <- replicate(nrow(plate), character(0), simplify = FALSE)
       plate$blanks         <- replicate(nrow(plate), character(0), simplify = FALSE)
+      plate$standards      <- NA_real_
       plate$plate          <- name
+      plate$standard_units <- NA_character_
 
       plate_list[[name]] <- plate
     }

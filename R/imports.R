@@ -2,6 +2,7 @@
 #' @import shinyjs
 #' @import bslib
 #' @import ggplot2
+#' @import plotly
 #' @importFrom readxl read_xlsx
 #' @importFrom ggpattern geom_rect_pattern
 #' @importFrom scales hue_pal

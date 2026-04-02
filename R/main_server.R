@@ -14,11 +14,12 @@ app_server <- function(input, output, session) {
       expanded <- plate %>%
         dplyr::filter(!is.na(value)) %>%
         dplyr::mutate(
+          # Expand into separate groups, distinguishing standards
           group_list = purrr::pmap(
-            list(is_control, is_blank, is_label,
-                 control_groups, blanks, labels),
-            function(is_control, is_blank, is_label,
-                     control_groups, blanks, labels) {
+            list(is_control, is_blank, is_label, is_standard,
+                 control_groups, blanks, labels, standards, standard_units),
+            function(is_control, is_blank, is_label, is_standard,
+                     control_groups, blanks, labels, standards, standard_units) {
 
               if (is_control && length(control_groups) > 0) {
                 tibble::tibble(group = control_groups, role = "control")
@@ -26,11 +27,16 @@ app_server <- function(input, output, session) {
               } else if (is_blank && length(blanks) > 0) {
                 tibble::tibble(group = blanks, role = "blank")
 
+              } else if (is_standard && !is.na(standards)) {
+                # UNIQUE internal group for standard
+                std_group <- paste0("STD__", standards)
+                tibble::tibble(group = std_group, role = "standard")
+
               } else if (is_label && length(labels) > 0) {
                 tibble::tibble(group = labels, role = "normal")
 
               } else {
-                tibble::tibble(group = character(0), role = character(0))  # <--- always a tibble
+                tibble::tibble(group = character(0), role = character(0))
               }
             }
           )
@@ -58,14 +64,10 @@ app_server <- function(input, output, session) {
   # ---- Navigation ----
   observeEvent(input$to_inspect,     { state$screen <- "inspect" })
   observeEvent(input$to_normalize,   { state$screen <- "normalize" })
-  observeEvent(input$back_to_upload, { state$screen <- "upload"
-  plates(list())       # clears uploaded plates
-  })
+  observeEvent(input$back_to_upload, { state$screen <- "upload"; plates(list()) })
   observeEvent(input$to_analysis,    { state$screen <- "analysis" })
   observeEvent(input$run_analysis,   { state$screen <- "results" })
-  observeEvent(input$start_over,     { state$screen <- "upload"
-  plates(list())       # clears uploaded plates
-  })
+  observeEvent(input$start_over,     { state$screen <- "upload"; plates(list()) })
 
   # ---- Header label ----
   output$step_label <- renderText({
@@ -89,15 +91,10 @@ app_server <- function(input, output, session) {
       analysis  = 80,
       results   = 100
     )
-
     tags$div(
       class = "progress w-100",
       style = "height: 1.2rem;",
-      tags$div(
-        class = "progress-bar",
-        role = "progressbar",
-        style = sprintf("width: %d%%;", value)
-      )
+      tags$div(class="progress-bar", role="progressbar", style=sprintf("width:%d%%;", value))
     )
   })
 

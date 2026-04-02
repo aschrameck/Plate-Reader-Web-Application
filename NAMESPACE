@@ -3,6 +3,7 @@
 export(run_plate_reader_app)
 import(bslib)
 import(ggplot2)
+import(plotly)
 import(shiny)
 import(shinyjs)
 importFrom(dplyr,filter)

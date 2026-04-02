@@ -53,6 +53,16 @@ inspect_ui <- function() {
             "Blank",
             value = FALSE
           ),
+
+          checkboxInput(
+            "mark_standard",
+            "Standard",
+            value = FALSE),
+
+          conditionalPanel(
+            condition = "input.mark_standard == true",
+            textInput("standard_units", "Units", placeholder = "e.g. mg/mL")
+          )
         )
       ),
 
@@ -71,7 +81,8 @@ inspect_ui <- function() {
               id = "plate_brush",
               resetOnNew = TRUE
             )
-          )
+          ),
+          uiOutput("standard_legend")
         )
       )
     ),
@@ -89,7 +100,7 @@ inspect_ui <- function() {
             class = "d-flex justify-content-between",
 
             actionButton(
-              "back_to_upload",
+              "to_upload",
               "Back",
               class = "btn-secondary"
             ),

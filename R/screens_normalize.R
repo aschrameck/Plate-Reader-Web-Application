@@ -30,7 +30,8 @@ normalize_ui <- function() {
                 div(
                   class = "d-grid gap-2",
                   downloadButton("download_csv", "CSV", class = "w-100"),
-                  downloadButton("download_prism", "Prism", class = "w-100")
+                  downloadButton("download_prism", "Prism", class = "w-100"),
+                  downloadButton("download_standards", "Standards", class = "w-100")
                 )
               )
             )
@@ -50,7 +51,7 @@ normalize_ui <- function() {
         card(
           div(
             class = "d-flex justify-content-between",
-            actionButton("back_to_upload", "Back", class = "btn-secondary"),
+            actionButton("to_inspect", "Back", class = "btn-secondary"),
             actionButton("to_analysis", "Next", class = "btn-primary")
           )
         )
