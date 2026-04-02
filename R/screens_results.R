@@ -28,7 +28,7 @@ results_ui <- function() {
     fluidRow(
       column(
         width = 10,
-        offset = 2,
+        offset = 1,
         card(
           div(
             class = "d-flex justify-content-between",

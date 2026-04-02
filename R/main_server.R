@@ -14,7 +14,6 @@ app_server <- function(input, output, session) {
       expanded <- plate %>%
         dplyr::filter(!is.na(value)) %>%
         dplyr::mutate(
-          # Expand into separate groups, distinguishing standards
           group_list = purrr::pmap(
             list(is_control, is_blank, is_label, is_standard,
                  control_groups, blanks, labels, standards, standard_units),
@@ -28,7 +27,6 @@ app_server <- function(input, output, session) {
                 tibble::tibble(group = blanks, role = "blank")
 
               } else if (is_standard && !is.na(standards)) {
-                # UNIQUE internal group for standard
                 std_group <- paste0("STD__", standards)
                 tibble::tibble(group = std_group, role = "standard")
 
@@ -62,12 +60,11 @@ app_server <- function(input, output, session) {
   })
 
   # ---- Navigation ----
+  observeEvent(input$to_upload,      { state$screen <- "upload"; plates(list()) })
   observeEvent(input$to_inspect,     { state$screen <- "inspect" })
   observeEvent(input$to_normalize,   { state$screen <- "normalize" })
-  observeEvent(input$back_to_upload, { state$screen <- "upload"; plates(list()) })
   observeEvent(input$to_analysis,    { state$screen <- "analysis" })
-  observeEvent(input$run_analysis,   { state$screen <- "results" })
-  observeEvent(input$start_over,     { state$screen <- "upload"; plates(list()) })
+  observeEvent(input$to_results,     { state$screen <- "results" })
 
   # ---- Header label ----
   output$step_label <- renderText({
@@ -91,10 +88,15 @@ app_server <- function(input, output, session) {
       analysis  = 80,
       results   = 100
     )
+
     tags$div(
       class = "progress w-100",
       style = "height: 1.2rem;",
-      tags$div(class="progress-bar", role="progressbar", style=sprintf("width:%d%%;", value))
+      tags$div(
+        class = "progress-bar",
+        role = "progressbar",
+        style = sprintf("width: %d%%;", value)
+      )
     )
   })
 
