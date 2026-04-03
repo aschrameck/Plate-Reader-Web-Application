@@ -13,6 +13,8 @@
 #' - Shared group mapping across modules
 #'
 #' @return None (Shiny server function)
+#' @seealso server_upload, server_inspect, server_normalize, server_analysis, server_results
+#' @family Server Screens
 
 app_server <- function(input, output, session) {
 

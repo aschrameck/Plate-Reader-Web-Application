@@ -17,6 +17,7 @@
 #' @return A Shiny UI layout containing plate visualization and labeling controls
 #'
 #' @seealso server_inspect
+#' @family UI Screens
 
 inspect_ui <- function() {
   tagList(

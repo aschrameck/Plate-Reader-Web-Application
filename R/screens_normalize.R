@@ -19,6 +19,7 @@
 #' @return A Shiny UI layout with normalization controls and preview outputs
 #'
 #' @seealso server_normalize
+#' @family UI Screens
 
 normalize_ui <- function() {
   tagList(

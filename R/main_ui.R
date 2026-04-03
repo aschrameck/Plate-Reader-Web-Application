@@ -1,3 +1,24 @@
+#' Main Application UI
+#'
+#' Constructs the primary Shiny UI layout, including navigation across all screens.
+#'
+#' @param state ReactiveValues object storing application state
+#'
+#' @details
+#' The main UI handles:
+#' - Layout of the app using a top-level navigation panel
+#' - Conditional display of screens (Upload, Inspect, Normalize, Analysis, Results)
+#' - Integration of reactive UI components from each sub-screen
+#'
+#' Expected behavior:
+#' - Updates displayed screen based on `state$screen`
+#' - Provides a consistent header/footer layout across all screens
+#'
+#' @return Shiny UI definition (`tagList` or `fluidPage`)
+#'
+#' @seealso screens_upload, screens_inspect, screens_normalize, screens_analysis, screens_results
+#' @family UI Screens
+
 main_ui <- function() {
 
   lab_theme <- bs_theme(

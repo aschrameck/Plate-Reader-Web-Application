@@ -15,6 +15,7 @@
 #' @return A Shiny UI layout containing file input controls and navigation buttons
 #'
 #' @seealso server_upload
+#' @family UI Screens
 
 upload_ui <- function() {
   tagList(

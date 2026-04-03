@@ -17,6 +17,7 @@
 #' @return A Shiny UI layout containing analysis options and result outputs
 #'
 #' @seealso server_results
+#' @family UI Screens
 
 analysis_ui <- function() {
   tagList(

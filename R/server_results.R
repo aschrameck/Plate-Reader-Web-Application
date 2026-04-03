@@ -23,6 +23,7 @@
 #'
 #' @seealso results_ui
 #' @family Server Screens
+
 server_results <- function(input, output, session, state, plates, group_map) {
 
   # ---- Plate selector (FIXED) ----

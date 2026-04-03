@@ -16,6 +16,7 @@
 #' @return A Shiny UI layout with plots, tables, and download controls
 #'
 #' @seealso server_results
+#' @family UI Screens
 
 results_ui <- function() {
   tagList(
