@@ -1,3 +1,26 @@
+#' Normalization Screen Server Logic
+#'
+#' Performs per-group normalization of plate data based on blanks and controls.
+#'
+#' @param input Shiny input object
+#' @param output Shiny output object
+#' @param session Shiny session object
+#' @param state ReactiveValues object storing application state
+#' @param plates Reactive object containing plate data
+#'
+#' @details
+#' Normalization workflow:
+#' 1. Blank correction: subtracts group blank mean from all wells
+#' 2. Control normalization: scales wells relative to group control mean
+#'
+#' Users can preview normalized values and validate group assignments.
+#' Reactive outputs include normalized data tables in several formats
+#'
+#' @return NULL; updates normalized plate values reactively
+#'
+#' @seealso normalize_ui
+#' @family Server Screens
+
 server_normalize <- function(input, output, session, state, plates, group_map) {
 
   # --- Plate selector ---
@@ -39,12 +62,24 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
 
         df$value <- as.numeric(as.character(df$value))
 
-        # --- Blank mean ---
-        blank_mean <- if (any(df$role == "blank")) mean(df$value[df$role == "blank"], na.rm = TRUE) else 0
-        df$blank_corrected <- df$value - blank_mean
+        # Compute means
+        safe_mean <- function(x) {
+          if (all(is.na(x))) return(NA_real_)
+          mean(x, na.rm = TRUE)
+        }
 
-        # --- Control mean ---
-        control_mean <- if (any(df$role == "control")) mean(df$blank_corrected[df$role == "control"], na.rm = TRUE) else NA_real_
+        blank_mean <- if (any(df$role == "blank")) {
+          safe_mean(df$value[df$role == "blank"])
+        } else 0
+
+        control_mean <- if (any(df$role == "control")) {
+          safe_mean(df$blank_corrected[df$role == "control"])
+        } else NA_real_
+
+        # Guard against invalid normalization
+        if (is.na(control_mean) || control_mean == 0) {
+          warning("Control mean missing or zero — using blank-corrected values.")
+        }
 
         # --- Normalized values (skip blanks) ---
         df$normalized_value <- NA_real_

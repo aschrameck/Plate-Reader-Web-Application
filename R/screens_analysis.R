@@ -1,3 +1,23 @@
+#' Analysis Screen UI
+#'
+#' Provides tools for selecting and performing statistical analysis on normalized data.
+#'
+#' @details
+#' Users can:
+#' - Choose statistical tests (e.g., ANOVA, t-test)
+#' - Generate plots and statistical summaries
+#'
+#' Supported analyses may include:
+#' - One-way ANOVA
+#' - Pairwise t-tests
+#' - Outlier detection
+#'
+#' Results are based on normalized values from the previous step.
+#'
+#' @return A Shiny UI layout containing analysis options and result outputs
+#'
+#' @seealso server_results
+
 analysis_ui <- function() {
   tagList(
     # ---- Top Card: analysis selection ----

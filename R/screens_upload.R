@@ -1,3 +1,21 @@
+#' Upload Screen UI
+#'
+#' Provides interface for uploading plate reader data files and initializing
+#' the application workflow.
+#'
+#' @details
+#' This is the entry point of the application. Users can:
+#' - Upload raw plate reader files
+#' - Initialize plate data structures
+#' - Transition to inspection and analysis workflows
+#'
+#' Expected input:
+#' - File formats compatible with the plate parsing logic
+#'
+#' @return A Shiny UI layout containing file input controls and navigation buttons
+#'
+#' @seealso server_upload
+
 upload_ui <- function() {
   tagList(
     tags$head(

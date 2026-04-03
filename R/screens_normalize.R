@@ -1,3 +1,25 @@
+#' Normalization Screen UI
+#'
+#' Provides controls for configuring and previewing normalization of plate data.
+#'
+#' @details
+#' Normalization is performed per group using:
+#' - Blank subtraction (background correction)
+#' - Control-based scaling (relative normalization)
+#'
+#' Users can:
+#' - Select plate for normalization
+#' - Preview normalized values
+#' - Validate group assignments before analysis
+#'
+#' Assumptions:
+#' - Each group may contain blank and/or control wells
+#' - If no control is present, normalization falls back to blank-corrected values
+#'
+#' @return A Shiny UI layout with normalization controls and preview outputs
+#'
+#' @seealso server_normalize
+
 normalize_ui <- function() {
   tagList(
     # ---- Top Card: Plate selector + Downloads ----

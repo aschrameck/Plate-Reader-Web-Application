@@ -1,3 +1,30 @@
+#' Plate Inspection Screen Server Logic
+#'
+#' Manages interactive inspection, labeling, and visualization of wells.
+#'
+#' @param input Shiny input object
+#' @param output Shiny output object
+#' @param session Shiny session object
+#' @param state ReactiveValues object storing application state
+#' @param plates Reactive object containing plate data
+#'
+#' @details
+#' This server function handles:
+#' - Updating plate selection choices
+#' - Rendering the interactive plate layout
+#' - Allowing users to select wells via brushing
+#' - Assigning and storing well labels (blank, control, standard, normal)
+#' - Ensuring proper group visualizations
+#'
+#' Reactive outputs include:
+#' - `plate_preview` plot of wells
+#' - Well selection metadata for downstream normalization
+#'
+#' @return NULL; updates `state` and plate metadata reactively
+#'
+#' @seealso inspect_ui
+#' @family Server Screens
+
 server_inspect <- function(input, output, session, state, plates) {
 
   # --- Select Plate ---
@@ -15,6 +42,9 @@ server_inspect <- function(input, output, session, state, plates) {
   # --- Plotting ---
   output$plate_preview <- renderPlot({
     req(input$active_plate)
+    validate(
+      need(input$active_plate %in% names(plates()), "Invalid plate selection")
+    )
 
     plate <- plates()[[input$active_plate]] %>%
       filter(!is.na(value))
@@ -59,6 +89,8 @@ server_inspect <- function(input, output, session, state, plates) {
       mutate(row = factor(row, levels = rev(sort(unique(row)))))
 
     # --- Compute sub-tiles for multi-group wells ---
+    # Each well can belong to multiple groups → split it visually into slices
+    # This ensures overlapping labels are visible instead of overwritten
     expanded_plate <- expanded_plate %>%
       group_by(row, col) %>%
       mutate(
@@ -235,6 +267,12 @@ server_inspect <- function(input, output, session, state, plates) {
   # Apply label to brushed wells
   observeEvent(input$apply_label, {
     req(input$plate_brush, input$active_plate)
+
+    # Prevent empty labels
+    if (!isTRUE(input$mark_standard) && (is.null(input$new_label) || input$new_label == "")) {
+      showNotification("Label cannot be empty.", type = "error")
+      return()
+    }
 
     plate_list <- plates()
     plate <- plate_list[[input$active_plate]]

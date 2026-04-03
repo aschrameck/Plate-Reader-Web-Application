@@ -1,3 +1,28 @@
+#' Results Screen Server Logic
+#'
+#' Displays and exports final analysis results.
+#'
+#' @param input Shiny input object
+#' @param output Shiny output object
+#' @param session Shiny session object
+#' @param state ReactiveValues object storing application state
+#' @param plates Reactive object containing normalized/analysis-ready plate data
+#' @param group_map Optional mapping of wells to groups
+#'
+#' @details
+#' This server function provides:
+#' - Reactive visualization of analysis results
+#' - Tables summarizing group statistics
+#' - Export functionality with correct formatting
+#'
+#' Users can:
+#' - Download processed data
+#' - Review group-level results visually and in tables
+#'
+#' @return NULL; reactive outputs and downloads are handled within
+#'
+#' @seealso results_ui
+#' @family Server Screens
 server_results <- function(input, output, session, state, plates, group_map) {
 
   # ---- Plate selector (FIXED) ----

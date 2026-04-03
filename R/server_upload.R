@@ -1,3 +1,29 @@
+#' Upload Screen Server Logic
+#'
+#' Handles file input, parsing, and initialization of plate data for the app.
+#'
+#' @param input Shiny input object
+#' @param output Shiny output object
+#' @param session Shiny session object
+#' @param state ReactiveValues object storing application state
+#' @param plates Reactive object for storing loaded plate data
+#'
+#' @details
+#' This function manages:
+#' - File upload events
+#' - Parsing raw plate reader files
+#' - Populating the plates reactive structure
+#' - Transitioning to the inspection workflow after upload
+#'
+#' Expected behavior:
+#' - Uploaded files are validated for format compatibility
+#' - On success, plate names are registered for downstream screens
+#'
+#' @return NULL; updates `state` and `plates` reactively
+#'
+#' @seealso upload_ui
+#' @family Server Screens
+
 server_upload <- function(input, output, session, state, plates) {
 
   allowed_ext <- c("csv", "txt", "xlsx")

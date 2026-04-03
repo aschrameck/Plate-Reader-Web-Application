@@ -1,3 +1,22 @@
+#' Results Screen UI
+#'
+#' Displays final analysis results, visualizations, and export options.
+#'
+#' @details
+#' Users can:
+#' - View statistical outputs and plots
+#' - Download visualizations
+#' - Generate a comprehensive teaching document
+#'
+#' Outputs may include:
+#' - Boxplots of normalized values
+#' - Statistical test results (ANOVA, etc.)
+#' - Exportable PDF files
+#'
+#' @return A Shiny UI layout with plots, tables, and download controls
+#'
+#' @seealso server_results
+
 results_ui <- function() {
   tagList(
     # ---- Top Card: Plate selector + Downloads ----

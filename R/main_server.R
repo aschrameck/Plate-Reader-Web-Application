@@ -1,3 +1,19 @@
+#' Main Shiny Server Logic
+#'
+#' Coordinates application state, navigation, and shared data across all modules.
+#'
+#' @param input Shiny input object
+#' @param output Shiny output object
+#' @param session Shiny session object
+#'
+#' @details
+#' Maintains:
+#' - Global screen state
+#' - Uploaded plate data
+#' - Shared group mapping across modules
+#'
+#' @return None (Shiny server function)
+
 app_server <- function(input, output, session) {
 
   # ---- GLOBAL STATE ----
@@ -5,23 +21,29 @@ app_server <- function(input, output, session) {
   plates <- reactiveVal(list())
 
   # ---- Shared group map ----
+  # ---- Shared group map ----
   group_map <- reactive({
 
     req(length(plates()) > 0)
 
     purrr::imap_dfr(plates(), function(plate, plate_name) {
 
+      # Remove empty wells early
       expanded <- plate %>%
         dplyr::filter(!is.na(value)) %>%
         dplyr::mutate(
+
+          # Expand each well into potentially multiple group-role pairs
           group_list = purrr::pmap(
             list(is_control, is_blank, is_label, is_standard,
                  control_groups, blanks, labels, standards, standard_units),
+
             function(is_control, is_blank, is_label, is_standard,
                      control_groups, blanks, labels, standards, standard_units) {
 
               out <- list()
 
+              # NOTE: One well can belong to multiple logical groups
               if (is_label && length(labels) > 0) {
                 out[[length(out) + 1]] <- tibble::tibble(group = labels, role = "normal")
               }
@@ -39,6 +61,7 @@ app_server <- function(input, output, session) {
                 out[[length(out) + 1]] <- tibble::tibble(group = std_group, role = "standard")
               }
 
+              # Safety: always return tibble
               if (length(out) == 0) {
                 return(tibble::tibble(group = character(0), role = character(0)))
               }
@@ -49,21 +72,16 @@ app_server <- function(input, output, session) {
         ) %>%
         tidyr::unnest(group_list)
 
+      # Safety: skip empty plates
       if (nrow(expanded) == 0) return(NULL)
 
       expanded %>%
         dplyr::mutate(
           plate = plate_name,
-          value = suppressWarnings(as.numeric(value))
+          value = suppressWarnings(as.numeric(value))  # prevent crashes on bad input
         ) %>%
         dplyr::select(
-          plate,
-          row,
-          col,
-          value,
-          group,
-          role,
-          standard_units
+          plate, row, col, value, group, role, standard_units
         )
     })
   })

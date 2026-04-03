@@ -1,3 +1,23 @@
+#' Plate Inspection Screen UI
+#'
+#' Displays an interactive plate layout for visual inspection and annotation
+#' of wells.
+#'
+#' @details
+#' Users can:
+#' - View plate structure and values
+#' - Select wells using brushing
+#' - Assign labels, blanks, controls, and standards
+#' - Visually confirm group assignments
+#'
+#' Special Features:
+#' - Multi-group wells are visually subdivided into slices
+#' - Color-coded labeling for different well roles
+#'
+#' @return A Shiny UI layout containing plate visualization and labeling controls
+#'
+#' @seealso server_inspect
+
 inspect_ui <- function() {
   tagList(
 
