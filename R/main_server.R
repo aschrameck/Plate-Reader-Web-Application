@@ -126,5 +126,5 @@ app_server <- function(input, output, session) {
   server_inspect(input, output, session, state, plates)
   server_normalize(input, output, session, state, plates, group_map)
   server_analysis(input, output, session, state, plates)
-  server_results(input, output, session, state, plates)
+  server_results(input, output, session, state, plates, group_map)
 }

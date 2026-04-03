@@ -8,6 +8,17 @@ analysis_ui <- function() {
         card(
           card_header("Statistical Analysis"),
           card_body(
+
+            # ---- Plate selector (NEW) ----
+            div(
+              class = "mb-3",
+              selectInput(
+                "analysis_plate",
+                "Select plate",
+                choices = NULL
+              )
+            ),
+
             # ---- Two-column layout ----
             div(
               class = "row",
@@ -22,7 +33,7 @@ analysis_ui <- function() {
                     "ANOVA",
                     "Tukey’s Post-Hoc Test",
                     "Outlier Identification",
-                    "F-Test with Bootstrapping"
+                    "F Test"
                   )
                 )
               ),
@@ -42,7 +53,7 @@ analysis_ui <- function() {
               )
             ),
 
-            # ---- Select All (bottom) ----
+            # ---- Select All ----
             div(
               class = "d-flex justify-content-start align-items-center mt-3",
               checkboxInput(
