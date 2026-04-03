@@ -49,8 +49,13 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
         # --- Normalized values (skip blanks) ---
         df$normalized_value <- NA_real_
         to_normalize <- df$role != "standard" & df$role != "blank"
+
         if (!is.na(control_mean) && control_mean != 0) {
+          # Standard case: divide by control
           df$normalized_value[to_normalize] <- df$blank_corrected[to_normalize] / control_mean
+        } else {
+          # No control: fall back to blank-corrected values
+          df$normalized_value[to_normalize] <- df$blank_corrected[to_normalize]
         }
 
         df$blank_mean <- blank_mean
@@ -65,7 +70,7 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
     detailed
   })
 
-  # --- Download detailed CSV (exclude standards) ---
+  # --- Download detailed CSV ---
   output$download_csv <- downloadHandler(
     filename = function() paste0(input$normalize_plate, "_processed_data.csv"),
     content = function(file) {
@@ -139,6 +144,7 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
     }
   )
 
+  # --- Download Prism Compatible CSV ---
   output$download_prism <- downloadHandler(
     filename = function() paste0(input$normalize_plate, "_prism.csv"),
     content = function(file) {
@@ -217,7 +223,7 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
       dplyr::select(Label, Unit, Value)
   })
 
-  # --- Download standards CSV ---
+  # --- Download Standards CSV ---
   output$download_standards <- downloadHandler(
     filename = function() paste0(input$normalize_plate, "_standards.csv"),
     content = function(file) {
