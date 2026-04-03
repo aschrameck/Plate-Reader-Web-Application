@@ -10,12 +10,12 @@ normalize_ui <- function() {
           card_body(
             class = "h-100 w-100",
             div(
-              class = "d-flex align-items-start",
+              class = "d-flex align-items-stretch",
 
               # --- Left: Plate selector ---
               div(
-                class = "pe-3 border-end", # padding + vertical line
-                style = "min-width: 200px;",
+                class = "pe-3 border-end d-flex flex-column",
+                style = "width: 50%;",
                 selectInput(
                   "normalize_plate",
                   "Select plate",
@@ -25,13 +25,14 @@ normalize_ui <- function() {
 
               # --- Right: Download buttons ---
               div(
-                class = "ps-3 flex-grow-1",
+                class = "ps-3 d-flex flex-column",
+                style = "width: 50%;",
                 tags$label("Download", class = "form-label"),
                 div(
                   class = "d-grid gap-2",
-                  downloadButton("download_csv", "CSV", class = "w-100"),
-                  downloadButton("download_prism", "Prism", class = "w-100"),
-                  downloadButton("download_standards", "Standards", class = "w-100")
+                  downloadButton("download_csv", "Detailed CSV", class = "w-100"),
+                  downloadButton("download_prism", "Prism Compatible", class = "w-100"),
+                  downloadButton("download_standards", "Standard Curves", class = "w-100")
                 )
               )
             )
@@ -41,7 +42,7 @@ normalize_ui <- function() {
     ),
 
     # Small spacing
-    div(class = "mt-3"),
+    div(class = "mt-2"),
 
     # ---- Bottom Card: Navigation ----
     fluidRow(

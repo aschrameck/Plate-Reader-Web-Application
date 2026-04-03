@@ -1,20 +1,45 @@
 results_ui <- function() {
   tagList(
-    # ---- Top Card: preview + download----
+    # ---- Top Card: Plate selector + Downloads ----
     fluidRow(
       column(
-        width = 10,
-        offset = 1,
+        width = 8,
+        offset = 2,
         card(
-          card_header("Results & Downloads"),
+          card_header("Download Outputs"),
           card_body(
-            plotOutput("final_plots"),
-            br(),
+            class = "h-100 w-100",
             div(
-              class = "d-flex gap-2 flex-wrap",
-              downloadButton("download_normalized", "Download Normalized Data"),
-              downloadButton("download_pdf", "Download PDF"),
-              downloadButton("download_teaching", "Download Teaching Document")
+              class = "d-flex align-items-stretch",
+
+              # --- Left: Plate selector ---
+              div(
+                class = "pe-3 border-end d-flex flex-column",
+                style = "width: 50%;",
+                selectInput(
+                  "results",
+                  "Select plate",
+                  choices = NULL
+                )
+              ),
+
+              # --- Right: Download buttons ---
+              div(
+                class = "ps-3 d-flex flex-column",
+                style = "width: 50%;",
+                tags$label("Download", class = "form-label"),
+
+                div(
+                  class = "d-grid gap-2",
+
+                  # Analysis outputs
+                  downloadButton("download_visualizations", "Visualizations (PDF/PNG)", class = "w-100"),
+                  downloadButton("download_stats", "Statistical Test Outputs", class = "w-100"),
+
+                  # Teaching material
+                  downloadButton("download_teaching_pdf", "Teaching Document (PDF)", class = "w-100")
+                )
+              )
             )
           )
         )
@@ -22,13 +47,13 @@ results_ui <- function() {
     ),
 
     # Small spacing
-    div(class = "mt-3"),
+    div(class = "mt-2"),
 
     # ---- Bottom Card: Navigation ----
     fluidRow(
       column(
-        width = 10,
-        offset = 1,
+        width = 8,
+        offset = 2,
         card(
           div(
             class = "d-flex justify-content-between",
@@ -38,4 +63,5 @@ results_ui <- function() {
         )
       )
     )
-)}
+  )
+}

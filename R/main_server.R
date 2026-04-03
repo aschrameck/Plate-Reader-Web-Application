@@ -62,7 +62,8 @@ app_server <- function(input, output, session) {
           col,
           value,
           group,
-          role
+          role,
+          standard_units
         )
     })
   })

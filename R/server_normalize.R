@@ -69,26 +69,6 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
   output$download_csv <- downloadHandler(
     filename = function() paste0(input$normalize_plate, "_processed_data.csv"),
     content = function(file) {
-      df <- normalized_data() %>%
-        dplyr::filter(role != "standard") %>%  # exclude standards
-        dplyr::select(
-          Row = row,
-          Column = col,
-          Group = group,
-          Role = role,
-          Value = value,
-          Blank_Mean = blank_mean,
-          Control_Mean = control_mean,
-          Normalized = normalized_value
-        )
-      write.csv(df, file, row.names = FALSE)
-    }
-  )
-
-  # --- Download Prism file (exclude standards, header first, label row after group) ---
-  output$download_prism <- downloadHandler(
-    filename = function() paste0(input$normalize_plate, "_prism.csv"),
-    content = function(file) {
       df <- normalized_data() %>% dplyr::filter(role != "standard")
       groups <- unique(df$group)
 
@@ -102,28 +82,48 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
 
         n <- max(length(normal), length(control), length(blank))
 
-        # Build table rows
+        # Build data rows
         tbl <- tibble::tibble(
           Normal = c(normal, rep("", n - length(normal))),
           Control = c(control, rep("", n - length(control))),
           Blank = c(blank, rep("", n - length(blank)))
         )
 
-        # Group header first
+        # Extract already-computed means (constant within group)
+        blank_mean_val <- unique(df$blank_mean[!is.na(df$blank_mean)])[1]
+        control_mean_val <- unique(df$control_mean[!is.na(df$control_mean)])[1]
+
+        # Add summary rows
+        summary_rows <- tibble::tibble(
+          Normal = c(
+            "",
+            paste0("Blank mean: ", round(blank_mean_val, 4)),
+            paste0("Control mean: ", round(control_mean_val, 4))
+          ),
+          Control = "",
+          Blank = ""
+        )
+
+        # Group header
         header <- tibble::tibble(
           Normal = paste0("Group: ", grp),
           Control = "",
           Blank = ""
         )
 
-        # Column labels row AFTER group header
+        # Column labels row
         colnames_row <- tibble::tibble(
           Normal = "Normal",
           Control = "Control",
           Blank = "Blank"
         )
 
-        group_tables[[grp]] <- dplyr::bind_rows(header, colnames_row, tbl)
+        group_tables[[grp]] <- dplyr::bind_rows(
+          header,
+          colnames_row,
+          tbl,
+          summary_rows,
+        )
       }
 
       # Combine horizontally with blank spacer columns
@@ -134,12 +134,72 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
           final_tbl <- cbind(final_tbl, spacer, group_tables[[i]])
         }
       }
-
+      colnames(final_tbl) <- NULL
       write.csv(final_tbl, file, row.names = FALSE, na = "")
     }
   )
 
-  # --- Standards CSV (use correct standard_units, remove prefixes and suffixes) ---
+  output$download_prism <- downloadHandler(
+    filename = function() paste0(input$normalize_plate, "_prism.csv"),
+    content = function(file) {
+
+      df <- normalized_data() %>%
+        dplyr::filter(role %in% c("normal", "control", "blank"))
+
+      req(nrow(df) > 0)
+
+      groups <- unique(df$group)
+
+      prism_list <- list()
+
+      for (grp in groups) {
+
+        sub <- df %>% dplyr::filter(group == grp)
+
+        make_vec <- function(role_name, value_col) {
+          vals <- sub[[value_col]][sub$role == role_name]
+          vals <- as.numeric(vals[!is.na(vals)])
+          vals
+        }
+
+        normal  <- make_vec("normal", "normalized_value")
+        control <- make_vec("control", "normalized_value")
+        blank   <- make_vec("blank", "value")
+
+        max_len <- max(length(normal), length(control), length(blank), 1)
+
+        pad <- function(x) {
+          length(x) <- max_len
+          x
+        }
+
+        # ONLY include columns that actually exist (non-empty)
+        if (length(normal) > 0) {
+          prism_list[[paste0(grp, "_Normal")]] <- pad(normal)
+        }
+
+        if (length(control) > 0) {
+          prism_list[[paste0(grp, "_Control")]] <- pad(control)
+        }
+
+        if (length(blank) > 0) {
+          prism_list[[paste0(grp, "_Blank")]] <- pad(blank)
+        }
+      }
+
+      prism_tbl <- as.data.frame(prism_list, check.names = FALSE)
+
+      write.csv(
+        prism_tbl,
+        file,
+        row.names = FALSE,
+        na = ""
+      )
+    }
+  )
+
+
+  # --- Standards CSV ---
   standards_data <- reactive({
     gm <- group_map()
     req(nrow(gm) > 0)
@@ -148,13 +208,11 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
     if (nrow(stds) == 0) return(NULL)
 
     stds %>%
-      dplyr::group_by(group) %>%
-      dplyr::summarize(
-        Label = sub("^STD__", "", first(group)),
-        Label = sub("_[A-Z]$", "", Label),
-        Unit = if ("standard_units" %in% names(stds)) first(na.omit(standard_units)) else NA,
-        Value = first(value),
-        .groups = "drop"
+      dplyr::mutate(
+        Label = sub("^STD__", "", group),          # remove STD__ prefix
+        Label = sub("_[A-Z]$", "", Label),         # remove trailing _A, _B etc
+        Unit = if ("standard_units" %in% names(stds)) standard_units else NA,
+        Value = value
       ) %>%
       dplyr::select(Label, Unit, Value)
   })

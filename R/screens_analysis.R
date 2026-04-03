@@ -6,37 +6,50 @@ analysis_ui <- function() {
         width = 8,
         offset = 2,
         card(
-          card_header("Statistical Analysis Options"),
+          card_header("Statistical Analysis"),
           card_body(
-            # Statistical tests checkboxes
-            checkboxGroupInput(
-              "analysis_types",
-              "Statistical tests",
-              choices = c("ANOVA", "Tukey’s Post-Hoc Test",
-                          "Outlier Identification", "F Test")
-            ),
-
-            # Visualizations checkboxes
-            checkboxGroupInput(
-              "viz_types",
-              "Visualizations",
-              choices = c("Boxplot", "Bar + Jitter Chart", "Standard Curve")
-            ),
-
-            # Bottom row: Select All left, Run Analysis right
+            # ---- Two-column layout ----
             div(
-              class = "d-flex justify-content-between align-items-center mt-3",
+              class = "row",
 
-              # Left: Select All
+              # LEFT: Statistical tests
               div(
-                class = "d-flex align-items-center",
-                style = "margin-top: 20px",
-                checkboxInput(
-                  "analysis_select_all",
-                  "Select All",
-                  value = FALSE
+                class = "col-md-6",
+                checkboxGroupInput(
+                  "analysis_types",
+                  "Statistical tests",
+                  choices = c(
+                    "ANOVA",
+                    "Tukey’s Post-Hoc Test",
+                    "Outlier Identification",
+                    "F-Test with Bootstrapping"
+                  )
                 )
               ),
+
+              # RIGHT: Visualizations
+              div(
+                class = "col-md-6",
+                checkboxGroupInput(
+                  "viz_types",
+                  "Visualizations",
+                  choices = c(
+                    "Boxplot",
+                    "Bar + Jitter Chart",
+                    "Standard Curve"
+                  )
+                )
+              )
+            ),
+
+            # ---- Select All (bottom) ----
+            div(
+              class = "d-flex justify-content-start align-items-center mt-3",
+              checkboxInput(
+                "analysis_select_all",
+                "Select All",
+                value = FALSE
+              )
             )
           )
         )
@@ -60,4 +73,5 @@ analysis_ui <- function() {
         )
       )
     )
-)}
+  )
+}
