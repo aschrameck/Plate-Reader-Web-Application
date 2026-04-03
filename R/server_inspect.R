@@ -20,7 +20,9 @@ server_inspect <- function(input, output, session, state, plates) {
       filter(!is.na(value))
 
     # Expand wells into groups
+    # --- Expand wells into groups ---
     expanded_plate <- plate %>%
+      filter(!is.na(value)) %>%
       mutate(
         group = purrr::pmap(
           list(is_control, is_blank, is_label, is_standard,
@@ -36,9 +38,9 @@ server_inspect <- function(input, output, session, state, plates) {
 
             } else if (is_standard && !is.na(standards)) {
               if (!is.na(standard_units) && standard_units != "") {
-                paste0(standards, " ", standard_units)
+                paste0("STD__", standards, " ", standard_units)
               } else {
-                as.character(standards)
+                paste0("STD__", standards)
               }
 
             } else if (is_label && length(labels) > 0) {
@@ -56,48 +58,48 @@ server_inspect <- function(input, output, session, state, plates) {
     expanded_plate <- expanded_plate %>%
       mutate(row = factor(row, levels = rev(sort(unique(row)))))
 
-    # Compute sub-tiles for multi-group controls
+    # --- Compute sub-tiles for multi-group wells ---
     expanded_plate <- expanded_plate %>%
       group_by(row, col) %>%
       mutate(
         n_groups = n(),
         slice_id = row_number(),
-        xmin = dplyr::case_when(
-          is_blank ~ col - 0.5,
-          TRUE ~ col - 0.5 + (slice_id - 1) / n_groups
-        ),
-        xmax = dplyr::case_when(
-          is_blank ~ col + 0.5,
-          TRUE ~ col - 0.5 + slice_id / n_groups
-        ),
-        ymin = dplyr::case_when(
-          is_blank ~ as.numeric(row) - 0.5 + (slice_id - 1) / n_groups,
-          TRUE ~ as.numeric(row) - 0.5
-        ),
-        ymax = dplyr::case_when(
-          is_blank ~ as.numeric(row) - 0.5 + slice_id / n_groups,
-          TRUE ~ as.numeric(row) + 0.5
-        )
-      ) %>% ungroup()
+        xmin = col - 0.5 + (slice_id - 1) / n_groups,
+        xmax = col - 0.5 + slice_id / n_groups,
+        ymin = as.numeric(row) - 0.5,
+        ymax = as.numeric(row) + 0.5
+      ) %>%
+      ungroup()
 
     # --- Dynamic label colors ---
-    std_labels <- ifelse(!is.na(plate$standard_units) & plate$standard_units != "",
-                         paste0(plate$standards, " ", plate$standard_units),
-                         as.character(plate$standards))
-    all_labels <- unique(c(unlist(plate$labels), unlist(plate$control_groups), unlist(plate$blanks), std_labels))
+    # Only include wells that are actually marked standard
+    std_labels <- plate %>%
+      dplyr::filter(is_standard) %>%
+      dplyr::mutate(
+        label = ifelse(!is.na(standard_units) & standard_units != "",
+                       paste0("STD__", standards, " ", standard_units),
+                       paste0("STD__", standards))
+      ) %>%
+      .$label
+
+    # Combine with other labels for palette
+    all_labels <- unique(c(unlist(plate$labels),
+                           unlist(plate$control_groups),
+                           unlist(plate$blanks),
+                           std_labels))
     all_labels <- all_labels[!is.na(all_labels) & all_labels != ""]
     if (length(all_labels) == 0) all_labels <- "dummy"
 
     # Split labels
-    std_labels <- std_labels[!is.na(std_labels) & std_labels != ""]
     other_labels <- setdiff(all_labels, std_labels)
 
     # Standard ordering
     std_df <- plate %>% filter(!is.na(standards)) %>%
       mutate(label = ifelse(!is.na(standard_units) & standard_units != "",
-                            paste0(standards, " ", standard_units),
-                            as.character(standards))) %>%
-      distinct(label, standards) %>% arrange(standards)
+                            paste0("STD__", standards, " ", standard_units),
+                            paste0("STD__", standards))) %>%
+      distinct(label, standards) %>%
+      arrange(standards)
 
     # Color palettes
     cat_colors <- if (length(other_labels) > 0) setNames(scales::hue_pal()(length(other_labels)), other_labels) else c()
@@ -146,7 +148,8 @@ server_inspect <- function(input, output, session, state, plates) {
         aes(x = col, y = row),
         fill = NA,
         color = "white",
-        linewidth = 1.2) +
+        linewidth = 1.2
+      ) +
 
       # Values
       geom_text(
@@ -159,7 +162,8 @@ server_inspect <- function(input, output, session, state, plates) {
         values = palette,
         breaks = non_std_labels,
         labels = identity,
-        na.value = "grey") +
+        na.value = "grey"
+      ) +
 
       # Formatting
       theme_void() +
@@ -173,12 +177,13 @@ server_inspect <- function(input, output, session, state, plates) {
           size = 11,
           color = "grey40",
           margin = margin(t = 8)
-        )) +
+        )
+      ) +
       labs(
         fill = "Label",
         caption = "Stripes indicate controls, dots indicate blanks \nGrey cells will be discarded"
       )
-  })
+    })
 
   # --- Buttons ---
   # Checkboxes mutually exclusive
@@ -357,10 +362,15 @@ server_inspect <- function(input, output, session, state, plates) {
     req(input$active_plate)
     plate <- plates()[[input$active_plate]]
 
-    std_vals <- sort(unique(na.omit(plate$standards)))
+    # Flatten list column and convert to numeric
+    std_vals <- plate$standards
+    std_vals <- as.numeric(unlist(std_vals))
+    std_vals <- std_vals[!is.na(std_vals)]
+
     units <- unique(na.omit(plate$standard_units))
 
-    if (length(std_vals) < 2) return(NULL)
+    if (length(std_vals) < 2) return(NULL)  # Only show if at least 2 numeric standards
+
     gradient_css <- "linear-gradient(to right, #deebf7, #08519c)"
     tags$div(
       style = "padding: 8px 12px;",
@@ -369,7 +379,12 @@ server_inspect <- function(input, output, session, state, plates) {
         tags$strong("Standard Wells"),
         tags$span(style = "font-size: 12px; color: grey;", if (length(units) > 0) units[1] else "")
       ),
-      tags$div(style = paste0("height: 12px; border-radius: 6px; margin: 6px 0;", "background: ", gradient_css, ";")),
+      tags$div(
+        style = paste0(
+          "height: 12px; border-radius: 6px; margin: 6px 0;",
+          "background: ", gradient_css, ";"
+        )
+      ),
       tags$div(
         style = "display: flex; justify-content: space-between; font-size: 12px;",
         tags$span(round(min(std_vals), 3)),
