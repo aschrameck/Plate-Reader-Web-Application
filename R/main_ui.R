@@ -7,7 +7,7 @@ main_ui <- function() {
 
   fluidPage(
     theme = lab_theme,
-    useShinyjs(),
+    shinyjs::useShinyjs(),
 
     # Top header (persistent)
     fluidRow(
