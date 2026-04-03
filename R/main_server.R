@@ -20,22 +20,30 @@ app_server <- function(input, output, session) {
             function(is_control, is_blank, is_label, is_standard,
                      control_groups, blanks, labels, standards, standard_units) {
 
-              if (is_control && length(control_groups) > 0) {
-                tibble::tibble(group = control_groups, role = "control")
+              out <- list()
 
-              } else if (is_blank && length(blanks) > 0) {
-                tibble::tibble(group = blanks, role = "blank")
-
-              } else if (is_standard && !is.na(standards)) {
-                std_group <- paste0("STD__", standards)
-                tibble::tibble(group = std_group, role = "standard")
-
-              } else if (is_label && length(labels) > 0) {
-                tibble::tibble(group = labels, role = "normal")
-
-              } else {
-                tibble::tibble(group = character(0), role = character(0))
+              if (is_label && length(labels) > 0) {
+                out[[length(out) + 1]] <- tibble::tibble(group = labels, role = "normal")
               }
+
+              if (is_control && length(control_groups) > 0) {
+                out[[length(out) + 1]] <- tibble::tibble(group = control_groups, role = "control")
+              }
+
+              if (is_blank && length(blanks) > 0) {
+                out[[length(out) + 1]] <- tibble::tibble(group = blanks, role = "blank")
+              }
+
+              if (is_standard && !is.na(standards)) {
+                std_group <- paste0("STD__", standards)
+                out[[length(out) + 1]] <- tibble::tibble(group = std_group, role = "standard")
+              }
+
+              if (length(out) == 0) {
+                return(tibble::tibble(group = character(0), role = character(0)))
+              }
+
+              dplyr::bind_rows(out)
             }
           )
         ) %>%
