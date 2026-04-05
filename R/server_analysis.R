@@ -61,4 +61,9 @@ server_analysis <- function(input, output, session, state, plates) {
       else character(0)
     )
   })
+
+  # Save selection
+  observeEvent(input$to_results, {
+    state$viz_types <- input$viz_types
+  })
 }

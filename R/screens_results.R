@@ -37,10 +37,10 @@ results_ui <- function() {
                 class = "pe-3 border-end d-flex flex-column",
                 style = "width: 50%;",
                 selectInput(
-                  "results",
+                  "active_plate",
                   "Select plate",
                   choices = NULL
-                )
+                ),
               ),
 
               # --- Right: Download buttons ---

@@ -51,99 +51,141 @@ main_ui <- function() {
         ),
 
         tags$style(HTML("
+        /* Truncate selected value */
+        .selectize-input > div {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 90%;
+        cursor: help;
+      }
 
-/* Modal width */
-.modal-dialog {
-  max-width: 95vw !important;
-}
+      /* Truncate dropdown options */
+      .selectize-dropdown .option {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
-/* Layout */
-.guide-container {
-  display: flex;
-  height: 80vh;
-}
+      /* Modal width */
+      .modal-dialog {
+        max-width: 95vw !important;
+      }
 
-/* Sidebar */
-.guide-sidebar {
-  width: 260px;
-  border-right: 1px solid #ddd;
-  padding: 15px;
-}
+      /* Layout */
+      .guide-container {
+        display: flex;
+        height: 80vh;
+      }
 
-/* Content */
-.guide-content {
-  flex-grow: 1;
-  padding: 25px;
-  overflow-y: auto;
-}
+      /* Sidebar */
+      .guide-sidebar {
+        width: 260px;
+        border-right: 1px solid #ddd;
+        padding: 15px;
+      }
 
-/* Sections */
-.guide-section {
-  margin-bottom: 60px;
-}
+      /* Content */
+      .guide-content {
+        flex-grow: 1;
+        padding: 25px;
+        overflow-y: auto;
+      }
 
-/* Nav */
-.guide-nav {
-  list-style: none;
-  padding-left: 0;
-}
+      /* Sections */
+      .guide-section {
+        margin-bottom: 60px;
+      }
 
-.guide-nav li {
-  margin: 10px 0;
-}
+      /* Nav */
+      .guide-nav {
+        list-style: none;
+        padding-left: 0;
+      }
 
-.guide-nav a {
-  text-decoration: none;
-  color: #0d6efd;
-  cursor: pointer;
-}
+      .guide-nav li {
+        margin: 10px 0;
+      }
 
-/* Screenshot placeholders */
-.guide-img {
-  border: 2px dashed #ccc;
-  border-radius: 8px;
-  padding: 30px;
-  text-align: center;
-  color: #888;
-  font-style: italic;
-  margin-top: 15px;
-}
+      .guide-nav a {
+        text-decoration: none;
+        color: #0d6efd;
+        cursor: pointer;
+      }
 
-")),
+      /* Screenshot placeholders */
+      .guide-img {
+        border: 2px dashed #ccc;
+        border-radius: 8px;
+        padding: 30px;
+        text-align: center;
+        color: #888;
+        font-style: italic;
+        margin-top: 15px;
+      }
+
+      ")),
 
         tags$script(HTML("
 
-// Open guide
-$(document).on('click', '#user_guide_icon', function() {
-  Shiny.setInputValue('user_guide_icon', Date.now(), {priority:'event'});
-});
+        function updatePlateTooltips() {
+      var select = $('#active_plate')[0].selectize;
+      if (!select) return;
 
-// Bug link
-$(document).on('click', '#bug_report_icon', function() {
-  window.open('https://forms.gle/egyr4C6T96c5RFfAA', '_blank');
-});
+      // Selected item div
+      select.$control.children('div.item, div.single').attr('title', select.getValue());
 
-// Smooth scroll
-$(document).on('click', '.guide-nav a', function(e) {
-  e.preventDefault();
-  var target = $(this).attr('href');
-  var container = $('.guide-content');
-  var scrollTo = $(target).position().top + container.scrollTop();
+      // Each dropdown option
+      select.$dropdown_content.find('.option').each(function() {
+        var val = $(this).attr('data-value');
+        $(this).attr('title', val);
+      });
+    }
 
-  container.animate({ scrollTop: scrollTo }, 400);
-});
+    // Initial load
+    $(document).ready(function() {
+      updatePlateTooltips();
+    });
 
-// Search
-$(document).on('keyup', '#guide_search', function() {
-  var value = $(this).val().toLowerCase();
+    // Update on change
+    $(document).on('change', '#active_plate', function() {
+      updatePlateTooltips();
+    });
 
-  $('.guide-section').each(function() {
-    var text = $(this).text().toLowerCase();
-    $(this).toggle(text.indexOf(value) > -1);
-  });
-});
+    // Update when dropdown opens
+    $(document).on('click', '#active_plate + .selectize-control .selectize-input', function() {
+      updatePlateTooltips();
+    });
 
-"))
+    // Open guide
+    $(document).on('click', '#user_guide_icon', function() {
+      Shiny.setInputValue('user_guide_icon', Date.now(), {priority:'event'});
+    });
+
+    // Bug link
+    $(document).on('click', '#bug_report_icon', function() {
+      window.open('https://forms.gle/egyr4C6T96c5RFfAA', '_blank');
+    });
+
+    // Smooth scroll
+    $(document).on('click', '.guide-nav a', function(e) {
+      e.preventDefault();
+      var target = $(this).attr('href');
+      var container = $('.guide-content');
+      var scrollTo = $(target).position().top + container.scrollTop();
+
+      container.animate({ scrollTop: scrollTo }, 400);
+    });
+
+    // Search
+    $(document).on('keyup', '#guide_search', function() {
+      var value = $(this).val().toLowerCase();
+
+      $('.guide-section').each(function() {
+        var text = $(this).text().toLowerCase();
+        $(this).toggle(text.indexOf(value) > -1);
+      });
+    });"))
       )
     ),
 
