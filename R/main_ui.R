@@ -1,3 +1,45 @@
+#' Main Application UI
+#'
+#' Defines the top-level user interface for the Plate Reader Analysis app.
+#' This includes the global layout, navigation header, theming, and shared
+#' resources (CSS/JS) that apply across all screens.
+#'
+#' @details
+#' The UI is composed of:
+#'
+#' **Header Section**
+#' - Application title
+#' - Dark mode toggle
+#' - User guide access icon
+#' - Bug report link
+#' - Step indicator and progress bar
+#'
+#' **Global Styling and Scripts**
+#' - Bootstrap icon integration
+#' - Custom CSS for layout and user guide modal
+#' - Global Selectize.js enhancements:
+#'   - Ellipsis truncation for long dropdown values
+#'   - Tooltip display for full text on hover
+#'
+#' **Dynamic Content Area**
+#' - `uiOutput("current_screen")` dynamically renders the active screen:
+#'   - Upload
+#'   - Inspect
+#'   - Normalize
+#'   - Analysis
+#'   - Results
+#'
+#' **User Guide Modal Features**
+#' - Sidebar navigation with smooth scrolling
+#' - Search/filter functionality
+#' - Responsive layout for large content display
+#'
+#' @return A `fluidPage` UI object for the full application
+#'
+#' @seealso main_server, run_app
+#'
+#' @family Main App
+
 main_ui <- function() {
 
   lab_theme <- bs_theme(version = 5, bootswatch = "zephyr")

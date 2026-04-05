@@ -1,3 +1,46 @@
+#' Main Application Server
+#'
+#' Controls global application state, navigation, and coordination between
+#' all analysis modules in the Plate Reader Analysis app.
+#'
+#' @details
+#' The server manages:
+#'
+#' **Application State**
+#' - `state$screen`: Tracks the current active screen
+#' - Controls navigation flow between:
+#'   - Upload → Inspect → Normalize → Results
+#'
+#' **Shared Reactive Data**
+#' - `plates`: Uploaded and processed plate datasets
+#' - `group_map`: Stores well group assignments and annotations
+#'
+#' **Screen Routing**
+#' - Dynamically renders UI via `output$current_screen`
+#' - Delegates logic to modular server functions:
+#'   - `server_upload`
+#'   - `server_inspect`
+#'   - `server_normalize`
+#'   - `server_analysis`
+#'   - `server_results`
+#'
+#' **Progress Tracking**
+#' - Updates step indicator text
+#' - Renders progress bar based on workflow stage
+#'
+#' **Global Events**
+#' - User guide modal trigger
+#' - Navigation button observers
+#'
+#' @param input Shiny input object
+#' @param output Shiny output object
+#' @param session Shiny session object
+#'
+#' @return None (server-side side effects)
+#'
+#' @seealso main_ui, run_app
+#' @family Main App
+
 app_server <- function(input, output, session) {
 
   # --- Global State ---
