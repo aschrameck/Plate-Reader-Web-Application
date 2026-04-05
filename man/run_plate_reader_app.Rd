@@ -2,10 +2,51 @@
 % Please edit documentation in R/run_app.R
 \name{run_plate_reader_app}
 \alias{run_plate_reader_app}
-\title{Run Plate Reader App}
+\title{Run Plate Reader Analysis Application}
 \usage{
 run_plate_reader_app()
 }
+\value{
+A running Shiny application
+}
 \description{
-Launches the interactive plate reader analysis Shiny app.
+Launches the full interactive Shiny application for plate reader data
+processing, visualization, normalization, and statistical analysis.
+}
+\details{
+This is the main entry point for the application. It initializes both the
+user interface and server logic, connecting all workflow stages:
+
+\strong{Application Workflow}
+\itemize{
+\item Upload raw plate reader data
+\item Inspect and label wells
+\item Normalize data across groups
+\item Perform statistical analysis and view results
+}
+
+\strong{Architecture}
+\itemize{
+\item \code{main_ui()} defines the global UI layout and shared resources
+\item \code{main_server()} coordinates application state and module interactions
+\item Modular server components handle each step of the workflow:
+\itemize{
+\item \code{server_upload}
+\item \code{server_inspect}
+\item \code{server_normalize}
+\item \code{server_analysis}
+\item \code{server_results}
+}
+\item Modular UI components handle each screen:
+\itemize{
+\item \code{screens_upload}
+\item \code{screens_inspect}
+\item \code{screens_normalize}
+\item \code{screens_analysis}
+\item \code{screens_results}
+}
+}
+}
+\seealso{
+main_ui, main_server
 }

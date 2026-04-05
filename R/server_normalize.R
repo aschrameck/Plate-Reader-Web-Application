@@ -72,14 +72,12 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
           safe_mean(df$value[df$role == "blank"])
         } else 0
 
+        # --- Create blank-corrected column (FIX) ---
+        df$blank_corrected <- df$value - blank_mean
+
         control_mean <- if (any(df$role == "control")) {
           safe_mean(df$blank_corrected[df$role == "control"])
         } else NA_real_
-
-        # Guard against invalid normalization
-        if (is.na(control_mean) || control_mean == 0) {
-          warning("Control mean missing or zero — using blank-corrected values.")
-        }
 
         # --- Normalized values (skip blanks) ---
         df$normalized_value <- NA_real_
@@ -130,8 +128,8 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
         )
 
         # Extract already-computed means (constant within group)
-        blank_mean_val <- unique(df$blank_mean[!is.na(df$blank_mean)])[1]
-        control_mean_val <- unique(df$control_mean[!is.na(df$control_mean)])[1]
+        blank_mean_val <- unique(df$blank_mean[!is.na(sub$blank_mean)])[1]
+        control_mean_val <- unique(df$control_mean[!is.na(sub$control_mean)])[1]
 
         # Add summary rows
         summary_rows <- tibble::tibble(
@@ -248,14 +246,50 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
     stds <- gm %>% dplyr::filter(role == "standard")
     if (nrow(stds) == 0) return(NULL)
 
-    stds %>%
+    # Prepare main table
+    df <- stds %>%
       dplyr::mutate(
-        Label = sub("^STD__", "", group),          # remove STD__ prefix
-        Label = sub("_[A-Z]$", "", Label),         # remove trailing _A, _B etc
-        Unit = if ("standard_units" %in% names(stds)) standard_units else NA,
-        Value = value
+        Label = sub("^STD__", "", group),
+        Label = sub("_[A-Z]$", "", Label),
+        Label = as.numeric(Label),
+        Unit = if ("standard_units" %in% names(stds)) standard_units else "",
+        Value = as.numeric(value)
       ) %>%
       dplyr::select(Label, Unit, Value)
+
+    # Fit least squares regression if enough points
+    if (nrow(df) >= 2 && all(!is.na(df$Label)) && all(!is.na(df$Value))) {
+      model <- lm(Value ~ Label, data = df)
+      df$Predicted <- predict(model, newdata = df)
+
+      r_squared <- summary(model)$r.squared
+      coefs <- coef(model)
+      eqn <- paste0("y = ", round(coefs[2], 4), "x + ", round(coefs[1], 4))
+    } else {
+      df$Predicted <- NA_real_
+      r_squared <- NA_real_
+      eqn <- NA_character_
+    }
+
+    # Convert everything to character for CSV export
+    df_char <- df %>%
+      dplyr::mutate(across(everything(), as.character))
+
+    # Blank row
+    blank_row <- tibble::tibble(
+      Label = "", Unit = "", Value = "", Predicted = ""
+    )
+
+    # Summary rows: R^2 and Equation
+    summary_rows <- tibble::tibble(
+      Label = c("R^2:", "Equation:"),
+      Unit = c(round(r_squared, 4), eqn),
+      Value = c("", ""),
+      Predicted = c("", "")
+    )
+
+    # Combine: main data + blank + summary
+    dplyr::bind_rows(df_char, blank_row, summary_rows)
   })
 
   # --- Download Standards CSV ---
