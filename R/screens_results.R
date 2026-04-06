@@ -53,7 +53,7 @@ results_ui <- function() {
                   class = "d-grid gap-2",
 
                   # Analysis outputs
-                  downloadButton("download_visualizations", "Visualizations (PDF/PNG)", class = "w-100"),
+                  downloadButton("download_visualizations", "Visualizations", class = "w-100"),
                   downloadButton("download_stats", "Statistical Test Outputs", class = "w-100"),
 
                   # Teaching material

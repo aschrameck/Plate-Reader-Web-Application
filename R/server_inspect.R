@@ -40,7 +40,7 @@ server_inspect <- function(input, output, session, state, plates) {
   })
 
   # --- Plotting ---
-  output$plate_preview <- renderPlot({
+  inspect_plot_reactive <- reactive({
     req(input$active_plate)
     validate(
       need(input$active_plate %in% names(plates()), "Invalid plate selection")
@@ -154,7 +154,7 @@ server_inspect <- function(input, output, session, state, plates) {
     non_std_labels <- setdiff(names(palette), std_df$label)
 
     # --- Plotting ---
-    ggplot(expanded_plate) +
+    plot <- ggplot(expanded_plate) +
       # Base layer: all wells
       geom_rect(
         aes(xmin = xmin, xmax = xmax,
@@ -225,7 +225,16 @@ server_inspect <- function(input, output, session, state, plates) {
         fill = "Label",
         caption = "Stripes indicate controls, dots indicate blanks \nGrey cells will be discarded"
       )
-    })
+  })
+
+  output$plate_preview <- renderPlot({
+    p <- inspect_plot_reactive()
+
+    # save per plate
+    state$inspect_plots[[input$active_plate]] <- p
+
+    p
+  })
 
   # --- Buttons ---
   # Checkboxes mutually exclusive
@@ -317,40 +326,40 @@ server_inspect <- function(input, output, session, state, plates) {
       plate$control_groups[idx] <- list(character(0))
       plate$labels[idx] <- list(character(0))
 
-      } else if (isTRUE(input$mark_blank)) {
-        plate$is_standard[idx] <- FALSE
-        plate$is_blank[idx] <- TRUE
-        plate$is_control[idx] <- FALSE
-        plate$is_label[idx] <- FALSE
+    } else if (isTRUE(input$mark_blank)) {
+      plate$is_standard[idx] <- FALSE
+      plate$is_blank[idx] <- TRUE
+      plate$is_control[idx] <- FALSE
+      plate$is_label[idx] <- FALSE
 
-        plate$standards[idx] <- list(character(0))
-        plate$control_groups[idx] <- list(character(0))
-        plate$labels[idx] <- list(character(0))
+      plate$standards[idx] <- list(character(0))
+      plate$control_groups[idx] <- list(character(0))
+      plate$labels[idx] <- list(character(0))
 
-        plate$blanks[idx] <- lapply(plate$blanks[idx], function(x) unique(c(x, input$new_label)))
+      plate$blanks[idx] <- lapply(plate$blanks[idx], function(x) unique(c(x, input$new_label)))
 
-      } else if (isTRUE(input$mark_control)) {
-        plate$is_standard[idx] <- FALSE
-        plate$is_blank[idx] <- FALSE
-        plate$is_control[idx] <- TRUE
-        plate$is_label[idx] <- FALSE
+    } else if (isTRUE(input$mark_control)) {
+      plate$is_standard[idx] <- FALSE
+      plate$is_blank[idx] <- FALSE
+      plate$is_control[idx] <- TRUE
+      plate$is_label[idx] <- FALSE
 
-        plate$blanks[idx] <- list(character(0))
-        plate$standards[idx] <- list(character(0))
-        plate$labels[idx] <- list(character(0))
-        plate$control_groups[idx] <- lapply(plate$control_groups[idx], function(x) unique(c(x, input$new_label)))
+      plate$blanks[idx] <- list(character(0))
+      plate$standards[idx] <- list(character(0))
+      plate$labels[idx] <- list(character(0))
+      plate$control_groups[idx] <- lapply(plate$control_groups[idx], function(x) unique(c(x, input$new_label)))
 
-      } else {
-        plate$is_standard[idx] <- FALSE
-        plate$is_blank[idx] <- FALSE
-        plate$is_control[idx] <- FALSE
-        plate$is_label[idx] <- TRUE
+    } else {
+      plate$is_standard[idx] <- FALSE
+      plate$is_blank[idx] <- FALSE
+      plate$is_control[idx] <- FALSE
+      plate$is_label[idx] <- TRUE
 
-        plate$blanks[idx] <- list(character(0))
-        plate$control_groups[idx] <- list(character(0))
-        plate$standards[idx] <- list(character(0))
-        plate$labels[idx] <- lapply(plate$labels[idx], function(x) unique(c(x, input$new_label)))
-      }
+      plate$blanks[idx] <- list(character(0))
+      plate$control_groups[idx] <- list(character(0))
+      plate$standards[idx] <- list(character(0))
+      plate$labels[idx] <- lapply(plate$labels[idx], function(x) unique(c(x, input$new_label)))
+    }
 
     plate_list[[input$active_plate]] <- plate
     plates(plate_list)
@@ -406,21 +415,42 @@ server_inspect <- function(input, output, session, state, plates) {
   })
 
   # --- Standard Legend ---
-  output$standard_legend <- renderUI({
+  make_standard_legend_plot <- function(std_vals, units = NULL) {
+    req(length(std_vals) >= 2)
+    df <- data.frame(x = seq_along(std_vals), y = 1, value = sort(std_vals))
+
+    ggplot(df, aes(x = x, y = y, fill = value)) +
+      geom_tile() +
+      scale_fill_gradient(low = "#deebf7", high = "#08519c", guide = "none") +
+      scale_x_continuous(
+        limits = c(1, length(std_vals)),
+        breaks = c(1, length(std_vals)),
+        labels = round(c(min(std_vals), max(std_vals)), 3)
+      ) +
+      theme_void() +
+      theme(
+        plot.margin = margin(2, 2, 2, 2),
+        axis.text.x = element_text(size = 12)
+      ) +
+      labs(
+        title = if (!is.null(units)) paste("Standard Wells (", units[1], ")", sep="") else "Standard Wells"
+      )
+  }
+
+  standard_legend_reactive <- reactive({
     req(input$active_plate)
     plate <- plates()[[input$active_plate]]
 
-    # Flatten list column and convert to numeric
     std_vals <- plate$standards
     std_vals <- as.numeric(unlist(std_vals))
     std_vals <- std_vals[!is.na(std_vals)]
 
     units <- unique(na.omit(plate$standard_units))
-
-    if (length(std_vals) < 2) return(NULL)  # Only show if at least 2 numeric standards
+    if (length(std_vals) < 2) return(NULL)
 
     gradient_css <- "linear-gradient(to right, #deebf7, #08519c)"
-    tags$div(
+
+    legend_ui <- tags$div(
       style = "padding: 8px 12px;",
       tags$div(
         style = "display: flex; justify-content: space-between; align-items: center;",
@@ -439,5 +469,14 @@ server_inspect <- function(input, output, session, state, plates) {
         tags$span(round(max(std_vals), 3))
       )
     )
+
+    # Store in state for results server
+    state$standard_legend[[input$active_plate]] <- legend_ui
+
+    legend_ui
+  })
+
+  output$standard_legend <- renderUI({
+    standard_legend_reactive()
   })
 }

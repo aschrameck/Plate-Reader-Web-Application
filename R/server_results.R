@@ -183,12 +183,68 @@ server_results <- function(input, output, session, state, plates, normalized_dat
   }
 
   # ---- Generate selected plots ----
+  # ---- Generate selected plots ----
   selected_plots <- reactive({
     req(state$viz_types)
     df <- analysis_data()
 
     plots <- list()
 
+    # --- Plate Layout ---
+    if (!is.null(state$inspect_plots[[input$active_plate]])) {
+      # Base plate layout
+      plots[["Plate Layout"]] <- state$inspect_plots[[input$active_plate]] +
+        labs(title = paste("Plate Layout -", input$active_plate)) +
+        theme(
+          plot.title = element_text(face = "bold", size = 16, hjust = 0.5)
+        )
+
+      if (!is.null(state$standard_legend[[input$active_plate]])) {
+        plate <- plates()[[input$active_plate]]
+
+        std_vals <- as.numeric(unlist(plate$standards))
+        std_vals <- std_vals[!is.na(std_vals)]
+        units <- unique(na.omit(plate$standard_units))
+
+        if (length(std_vals) >= 2) {
+          # --- Build gradient legend grob ---
+          n_bins <- 100
+          grad_colors <- colorRampPalette(c("#deebf7", "#08519c"))(n_bins)
+          grad_df <- data.frame(
+            x = seq_len(n_bins),
+            y = 1,
+            fill = grad_colors
+          )
+
+          grad_grob <- ggplot2::ggplot(grad_df, aes(x = x, y = y, fill = fill)) +
+            geom_tile() +
+            scale_fill_identity() +
+            scale_x_continuous(
+              limits = c(1, n_bins),
+              breaks = c(1, n_bins),
+              labels = round(c(min(std_vals), max(std_vals)), 3)
+            ) +
+            theme_void() +
+            theme(
+              axis.text.x = element_text(size = 10),
+              plot.margin = margin(2, 2, 2, 2)
+            ) +
+            labs(
+              title = if (length(units) > 0) paste("Standard Wells (", units[1], ")", sep="") else "Standard Wells"
+            )
+
+          # Combine plate layout and legend vertically
+          plots[["Plate Layout"]] <- gridExtra::arrangeGrob(
+            plots[["Plate Layout"]],
+            grad_grob,
+            ncol = 1,
+            heights = c(3, 0.4)
+          )
+        }
+      }
+    }
+
+    # ---- Other plots ----
     if ("Boxplot" %in% state$viz_types) {
       plots[["Boxplot"]] <- make_boxplot(df)
     }
@@ -220,11 +276,26 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
       for (p in plots) {
         grid.newpage()
-        print(p, vp = viewport(
-          x = 0.5, y = 0.5,        # center
-          width = 0.8, height = 0.6,  # horizontal plot with top/bottom margins
+
+        vp <- grid::viewport(
+          x = 0.5, y = 0.5,       # center
+          width = 0.8, height = 0.6,
           just = "center"
-        ))
+        )
+
+        # Detect if it's an arranged grob (Plate Layout) or ggplot
+        if (inherits(p, "gtable") || inherits(p, "grob")) {
+          grid::pushViewport(vp)
+          grid::grid.draw(p)  # correct way to render grobs
+          grid::popViewport()
+
+        } else {
+          print(p, vp = viewport(
+            x = 0.5, y = 0.5,        # center
+            width = 0.8, height = 0.6,  # horizontal plot with top/bottom margins
+            just = "center"
+          ))
+        }
       }
 
       dev.off()

@@ -34,6 +34,7 @@
 #' @seealso main_ui, main_server
 #'
 #' @export
+
 run_plate_reader_app <- function() {
   shiny::shinyApp(
     ui = main_ui(),
