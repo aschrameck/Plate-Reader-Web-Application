@@ -169,9 +169,9 @@ app_server <- function(input, output, session) {
   # ---- Call screen servers ----
   server_upload(input, output, session, state, plates)
   server_inspect(input, output, session, state, plates)
-  server_normalize(input, output, session, state, plates, group_map)
+  normalized_data <- server_normalize(input, output, session, state, plates, group_map)
   server_analysis(input, output, session, state, plates)
-  server_results(input, output, session, state, plates, group_map)
+  server_results(input, output, session, state, plates, normalized_data)
 
   # ---- USER GUIDE ----
   observeEvent(input$user_guide_icon, {

@@ -4,7 +4,7 @@
 \alias{server_results}
 \title{Results Screen Server Logic}
 \usage{
-server_results(input, output, session, state, plates, group_map)
+server_results(input, output, session, state, plates, normalized_data)
 }
 \arguments{
 \item{input}{Shiny input object}
@@ -17,7 +17,7 @@ server_results(input, output, session, state, plates, group_map)
 
 \item{plates}{Reactive object containing normalized/analysis-ready plate data}
 
-\item{group_map}{Optional mapping of wells to groups}
+\item{normalized_data}{Processed values}
 }
 \value{
 NULL; reactive outputs and downloads are handled within

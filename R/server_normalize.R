@@ -46,9 +46,6 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
 
   # --- Reactive: Normalized data table ---
   normalized_data <- reactive({
-    req(state$screen == "normalize")
-    req(input$normalize_plate)
-
     gm <- group_map()
     req(nrow(gm) > 0)
 
@@ -301,4 +298,6 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
       write.csv(df, file, row.names = FALSE)
     }
   )
+
+  return(normalized_data)
 }

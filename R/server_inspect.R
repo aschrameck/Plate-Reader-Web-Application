@@ -96,10 +96,20 @@ server_inspect <- function(input, output, session, state, plates) {
       mutate(
         n_groups = n(),
         slice_id = row_number(),
-        xmin = col - 0.5 + (slice_id - 1) / n_groups,
-        xmax = col - 0.5 + slice_id / n_groups,
-        ymin = as.numeric(row) - 0.5,
-        ymax = as.numeric(row) + 0.5
+        # Horizontal splitting for normal/standard/control wells (x-axis)
+        xmin = ifelse(is_blank,
+                      col - 0.5,
+                      col - 0.5 + (slice_id - 1) / n_groups),
+        xmax = ifelse(is_blank,
+                      col + 0.5,
+                      col - 0.5 + slice_id / n_groups),
+        # Vertical splitting for blank wells (y-axis)
+        ymin = ifelse(is_blank,
+                      as.numeric(row) - 0.5 + (slice_id - 1) / n_groups,
+                      as.numeric(row) - 0.5),
+        ymax = ifelse(is_blank,
+                      as.numeric(row) - 0.5 + slice_id / n_groups,
+                      as.numeric(row) + 0.5)
       ) %>%
       ungroup()
 
