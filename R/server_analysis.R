@@ -48,8 +48,7 @@ server_analysis <- function(input, output, session, state, plates) {
       session,
       "analysis_types",
       selected = if (input$analysis_select_all)
-        c("ANOVA", "Tukey’s Post-Hoc Test",
-          "Outlier Identification", "F Test")
+        c("T-test", "ANOVA", "Tukey’s Post-Hoc Test", "Outlier Detection")
       else character(0)
     )
 
@@ -65,5 +64,6 @@ server_analysis <- function(input, output, session, state, plates) {
   # Save selection
   observeEvent(input$to_results, {
     state$viz_types <- input$viz_types
+    state$analysis_types <- input$analysis_types
   })
 }

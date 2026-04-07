@@ -183,7 +183,6 @@ server_results <- function(input, output, session, state, plates, normalized_dat
   }
 
   # ---- Generate selected plots ----
-  # ---- Generate selected plots ----
   selected_plots <- reactive({
     req(state$viz_types)
     df <- analysis_data()
@@ -296,6 +295,322 @@ server_results <- function(input, output, session, state, plates, normalized_dat
             just = "center"
           ))
         }
+      }
+
+      dev.off()
+    }
+  )
+
+  # ---- Statistical Analysis ----
+  analysis_results <- reactive({
+    req(state$analysis_types)
+    df <- analysis_data()
+
+    results <- list()
+
+    # Keep only non-standard values
+    stat_df <- df %>%
+      dplyr::filter(role != "standard") %>%
+      dplyr::filter(!is.na(value), !is.na(plot_group))
+
+    # Ensure factor
+    stat_df$plot_group <- factor(stat_df$plot_group)
+
+    # ---- T-TESTS ----
+    if ("T-test" %in% state$analysis_types) {
+
+      groups <- levels(stat_df$plot_group)
+
+      # Pairwise t-tests
+      ttest_res <- pairwise.t.test(
+        stat_df$value,
+        stat_df$plot_group,
+        p.adjust.method = "BH"
+      )
+
+      results$ttest <- ttest_res
+    }
+
+    # ---- ANOVA ----
+    if ("ANOVA" %in% state$analysis_types) {
+
+      fit <- aov(value ~ plot_group, data = stat_df)
+      anova_table <- summary(fit)
+
+      results$anova <- anova_table
+
+      # ---- Tukey Post-hoc ----
+      if ("Tukey’s Post-Hoc Test" %in% state$analysis_types) {
+        tukey <- TukeyHSD(fit)
+        results$tukey <- tukey
+      }
+    }
+
+    # ---- OUTLIER DETECTION (IQR method) ----
+    if ("Outlier Detection" %in% state$analysis_types) {
+
+      outliers <- stat_df %>%
+        dplyr::group_by(plot_group) %>%
+        dplyr::mutate(
+          Q1 = quantile(value, 0.25, na.rm = TRUE),
+          Q3 = quantile(value, 0.75, na.rm = TRUE),
+          IQR = Q3 - Q1,
+          lower = Q1 - 1.5 * IQR,
+          upper = Q3 + 1.5 * IQR,
+          is_outlier = value < lower | value > upper
+        ) %>%
+        dplyr::filter(is_outlier) %>%
+        dplyr::ungroup()
+
+      results$outliers <- outliers
+    }
+
+    results
+  })
+
+  # ---- Download Analysis ----
+  output$download_stats <- downloadHandler(
+    filename = function() {
+      paste0(input$active_plate, "_analysis.pdf")
+    },
+
+    content = function(file) {
+
+      res <- analysis_results()
+      df <- analysis_data()
+
+      req(nrow(df) > 0)
+
+      # ---- Prepare statistical dataset ----
+      stat_df <- df %>%
+        dplyr::filter(role != "standard") %>%
+        dplyr::filter(!is.na(value), !is.na(plot_group))
+
+      stat_df$plot_group <- factor(stat_df$plot_group)
+
+      # ---- Helper: significance codes ----
+      signif_code <- function(p) {
+        dplyr::case_when(
+          p < 0.001 ~ "***",
+          p < 0.01  ~ "**",
+          p < 0.05  ~ "*",
+          p < 0.1   ~ ".",
+          TRUE ~ "ns"
+        )
+      }
+
+      # ---- Identify control group automatically ----
+      control_group <- levels(stat_df$plot_group)[grepl("Control", levels(stat_df$plot_group))][1]
+
+      # ---- Control vs Treatment T-tests ----
+      control_tests <- NULL
+
+      if (!is.na(control_group)) {
+
+        control_tests <- lapply(
+          setdiff(levels(stat_df$plot_group), control_group),
+          function(g) {
+
+            x <- stat_df$value[stat_df$plot_group == control_group]
+            y <- stat_df$value[stat_df$plot_group == g]
+
+            if (length(x) < 2 || length(y) < 2) return(NULL)
+
+            test <- t.test(x, y)
+
+            data.frame(
+              Comparison = paste(control_group, "vs", g),
+              Null_Hypothesis = "The means of the two groups are equal",
+              Alternative_Hypothesis = "The means of the two groups are different",
+              Mean_Control = mean(x, na.rm = TRUE),
+              Mean_Treatment = mean(y, na.rm = TRUE),
+              T_Statistic = unname(test$statistic),
+              Degrees_of_Freedom = unname(test$parameter),
+              P_Value = test$p.value,
+              Confidence_Interval_Lower = test$conf.int[1],
+              Confidence_Interval_Upper = test$conf.int[2],
+              Significance = signif_code(test$p.value),
+              Outcome = ifelse(test$p.value < 0.05,
+                               "Statistically significant difference",
+                               "No statistically significant difference")
+            )
+          }
+        )
+
+        control_tests <- dplyr::bind_rows(control_tests)
+      }
+
+      # ---- Summary statistics ----
+      summary_table <- stat_df %>%
+        dplyr::group_by(plot_group) %>%
+        dplyr::summarise(
+          Group = dplyr::first(plot_group),
+          Mean = mean(value, na.rm = TRUE),
+          Median = median(value, na.rm = TRUE),
+          Standard_Deviation = sd(value, na.rm = TRUE),
+          Sample_Size = dplyr::n(),
+          Standard_Error = Standard_Deviation / sqrt(Sample_Size),
+          Minimum = min(value, na.rm = TRUE),
+          Maximum = max(value, na.rm = TRUE),
+          .groups = "drop"
+        ) %>%
+        dplyr::select(-plot_group)
+
+      # ---- ANOVA ----
+      anova_df <- NULL
+      tukey_df <- NULL
+
+      if (!is.null(res$anova)) {
+
+        fit <- aov(value ~ plot_group, data = stat_df)
+        a <- summary(fit)[[1]]
+
+        anova_df <- data.frame(
+          Term = rownames(a),
+          Degrees_of_Freedom = a$Df,
+          Sum_of_Squares = a$`Sum Sq`,
+          Mean_Square = a$`Mean Sq`,
+          F_Statistic = a$`F value`,
+          P_Value = a$`Pr(>F)`
+        )
+
+        anova_df$Significance <- signif_code(anova_df$P_Value)
+        rownames(anova_df) <- NULL
+
+        # ---- Tukey ----
+        if (!is.null(res$tukey)) {
+          tk <- TukeyHSD(fit)[[1]]
+
+          tukey_df <- data.frame(
+            Comparison = rownames(tk),
+            Difference_in_Means = tk[, "diff"],
+            Confidence_Interval_Lower = tk[, "lwr"],
+            Confidence_Interval_Upper = tk[, "upr"],
+            Adjusted_P_Value = tk[, "p adj"]
+          )
+
+          tukey_df$Significance <- signif_code(tukey_df$Adjusted_P_Value)
+          rownames(tukey_df) <- NULL
+        }
+      }
+
+      # ---- Outliers ----
+      outlier_df <- NULL
+
+      if (!is.null(res$outliers) && nrow(res$outliers) > 0) {
+
+        outlier_df <- res$outliers %>%
+          dplyr::mutate(
+            Distance_From_Bound = dplyr::case_when(
+              value < lower ~ lower - value,
+              value > upper ~ value - upper,
+              TRUE ~ NA_real_
+            )
+          ) %>%
+          dplyr::select(
+            Group = plot_group,
+            Normalized_Value = value,
+            Lower_Bound = lower,
+            Upper_Bound = upper,
+            Distance_From_Bound
+          )
+      }
+
+      # ---- Start PDF ----
+      pdf(file, width = 8.5, height = 11)
+
+      # ---- Helper to print clean tables ----
+      print_table <- function(title, table_df) {
+
+        grid::grid.newpage()
+
+        # ---- Title ----
+        grid::grid.text(
+          title,
+          y = 0.95,
+          gp = grid::gpar(fontsize = 16, fontface = "bold")
+        )
+
+        # ---- Zebra striping ----
+        n_rows <- nrow(table_df)
+
+        core_bg <- rep(c("grey95", "white"), length.out = n_rows)
+
+        table_theme <- gridExtra::ttheme_minimal(
+          base_size = 9,  # slightly smaller to prevent overflow
+          core = list(
+            fg_params = list(hjust = 0.5, x = 0.5),
+            bg_params = list(fill = core_bg, col = NA)
+          ),
+          colhead = list(
+            fg_params = list(fontface = "bold", hjust = 0.5),
+            bg_params = list(fill = "grey85")
+          )
+        )
+
+        # ---- Create table grob ----
+        tbl <- gridExtra::tableGrob(
+          table_df,
+          rows = NULL,
+          theme = table_theme
+        )
+
+        # ---- Scale table to fit page ----
+        max_width  <- grid::unit(0.95, "npc")
+        max_height <- grid::unit(0.80, "npc")
+
+        tbl_width  <- grid::convertWidth(sum(tbl$widths), "npc", valueOnly = TRUE)
+        tbl_height <- grid::convertHeight(sum(tbl$heights), "npc", valueOnly = TRUE)
+
+        scale_factor <- min(
+          0.8 / tbl_width,
+          0.8 / tbl_height
+        )
+
+        if (scale_factor < 1) {
+          tbl$widths  <- tbl$widths * scale_factor
+          tbl$heights <- tbl$heights * scale_factor
+        }
+
+        # ---- Draw centered ----
+        grid::grid.draw(
+          grid::grobTree(
+            tbl,
+            vp = grid::viewport(
+              x = 0.5,
+              y = 0.45,
+              width = max_width,
+              height = max_height,
+              just = "center"
+            )
+          )
+        )
+      }
+
+      # ---- Render tables ----
+      print_table("Summary Statistics", summary_table)
+
+      if (!is.null(control_tests) && nrow(control_tests) > 0) {
+        print_table("Control Versus Treatment T-Tests", control_tests)
+      }
+
+      if (!is.null(res$ttest)) {
+        ttest_df <- as.data.frame(res$ttest$p.value)
+        ttest_df$Group <- rownames(ttest_df)
+        rownames(ttest_df) <- NULL
+        print_table("Pairwise T-Test Adjusted P-Values", ttest_df)
+      }
+
+      if (!is.null(anova_df)) {
+        print_table("Analysis of Variance (ANOVA)", anova_df)
+      }
+
+      if (!is.null(tukey_df)) {
+        print_table("Tukey Post Hoc Test", tukey_df)
+      }
+
+      if (!is.null(outlier_df)) {
+        print_table("Detected Outliers", outlier_df)
       }
 
       dev.off()

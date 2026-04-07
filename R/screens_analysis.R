@@ -51,10 +51,7 @@ analysis_ui <- function() {
                   "analysis_types",
                   "Statistical tests",
                   choices = c(
-                    "ANOVA",
-                    "Tukey’s Post-Hoc Test",
-                    "Outlier Identification",
-                    "F Test"
+                    "T-test", "ANOVA", "Tukey’s Post-Hoc Test", "Outlier Detection"
                   )
                 )
               ),
