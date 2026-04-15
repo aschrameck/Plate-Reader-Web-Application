@@ -54,7 +54,7 @@ results_ui <- function() {
 
                   # Analysis outputs
                   downloadButton("download_visualizations", "Visualizations", class = "w-100"),
-                  downloadButton("download_stats", "Statistical Test Outputs", class = "w-100"),
+                  downloadButton("download_stats", "Statistical Analysis", class = "w-100"),
 
                   # Teaching material
                   downloadButton("download_teaching_pdf", "Teaching Document (PDF)", class = "w-100")

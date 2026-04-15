@@ -107,7 +107,8 @@ server_results <- function(input, output, session, state, plates, normalized_dat
   # ---- Plot generators ----
   make_boxplot <- function(df) {
     box_df <- df %>%
-      dplyr::filter(role != "standard")  # keep controls
+      dplyr::filter(role != "standard") %>%
+      dplyr::distinct(plot_group, row, col, .keep_all = TRUE)
 
     ggplot(box_df, aes(x = plot_group, y = value, fill = plot_group)) +
       geom_boxplot(alpha = 0.8, outlier.shape = 16, outlier.size = 2) +
@@ -125,7 +126,8 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
   make_bar_jitter <- function(df) {
     bar_df <- df %>%
-      dplyr::filter(role != "standard")  # keep controls
+      dplyr::filter(role != "standard") %>%
+      dplyr::distinct(plot_group, row, col, .keep_all = TRUE)
 
     ggplot(bar_df, aes(x = plot_group, y = value, fill = plot_group)) +
       stat_summary(fun = mean, geom = "bar", alpha = 0.8, color = "black", width = 0.6) +
@@ -303,22 +305,32 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
   # ---- Statistical Analysis ----
   analysis_results <- reactive({
-    req(state$analysis_types)
+
+    # Allow empty selections
+    if (is.null(state$analysis_types)) {
+      state$analysis_types <- character(0)
+    }
+
     df <- analysis_data()
 
-    results <- list()
+    results <- list(
+      ttest = NULL,
+      anova = NULL,
+      tukey = NULL,
+      outliers = NULL
+    )
 
     # Keep only non-standard values
     stat_df <- df %>%
       dplyr::filter(role != "standard") %>%
-      dplyr::filter(!is.na(value), !is.na(plot_group))
+      dplyr::filter(!is.na(value), !is.na(plot_group)) %>%
+      dplyr::distinct(plot_group, row, col, .keep_all = TRUE)
 
     # Ensure factor
     stat_df$plot_group <- factor(stat_df$plot_group)
 
     # ---- T-TESTS ----
-    if ("T-test" %in% state$analysis_types) {
-
+    if ("T-test (Control vs Treatment)" %in% state$analysis_types) {
       groups <- levels(stat_df$plot_group)
 
       # Pairwise t-tests
@@ -332,7 +344,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
     }
 
     # ---- ANOVA ----
-    if ("ANOVA" %in% state$analysis_types) {
+    if ("ANOVA (Multigroup)" %in% state$analysis_types) {
 
       fit <- aov(value ~ plot_group, data = stat_df)
       anova_table <- summary(fit)
@@ -340,10 +352,8 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       results$anova <- anova_table
 
       # ---- Tukey Post-hoc ----
-      if ("Tukey’s Post-Hoc Test" %in% state$analysis_types) {
-        tukey <- TukeyHSD(fit)
-        results$tukey <- tukey
-      }
+      tukey <- TukeyHSD(fit)
+      results$tukey <- tukey
     }
 
     # ---- OUTLIER DETECTION (IQR method) ----
@@ -384,7 +394,8 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       # ---- Prepare statistical dataset ----
       stat_df <- df %>%
         dplyr::filter(role != "standard") %>%
-        dplyr::filter(!is.na(value), !is.na(plot_group))
+        dplyr::filter(!is.na(value), !is.na(plot_group)) %>%
+        dplyr::distinct(plot_group, row, col, .keep_all = TRUE)
 
       stat_df$plot_group <- factor(stat_df$plot_group)
 
@@ -398,6 +409,22 @@ server_results <- function(input, output, session, state, plates, normalized_dat
           TRUE ~ "ns"
         )
       }
+
+      # ---- Summary statistics ----
+      summary_table <- stat_df %>%
+        dplyr::group_by(plot_group) %>%
+        dplyr::summarise(
+          Group = dplyr::first(plot_group),
+          Mean = mean(value, na.rm = TRUE),
+          Median = median(value, na.rm = TRUE),
+          Standard_Deviation = sd(value, na.rm = TRUE),
+          Sample_Size = dplyr::n(),
+          Standard_Error = Standard_Deviation / sqrt(Sample_Size),
+          Minimum = min(value, na.rm = TRUE),
+          Maximum = max(value, na.rm = TRUE),
+          .groups = "drop"
+        ) %>%
+        dplyr::select(-plot_group)
 
       # ---- Identify control group automatically ----
       control_group <- levels(stat_df$plot_group)[grepl("Control", levels(stat_df$plot_group))][1]
@@ -420,41 +447,21 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
             data.frame(
               Comparison = paste(control_group, "vs", g),
-              Null_Hypothesis = "The means of the two groups are equal",
-              Alternative_Hypothesis = "The means of the two groups are different",
               Mean_Control = mean(x, na.rm = TRUE),
               Mean_Treatment = mean(y, na.rm = TRUE),
               T_Statistic = unname(test$statistic),
               Degrees_of_Freedom = unname(test$parameter),
               P_Value = test$p.value,
-              Confidence_Interval_Lower = test$conf.int[1],
-              Confidence_Interval_Upper = test$conf.int[2],
               Significance = signif_code(test$p.value),
               Outcome = ifelse(test$p.value < 0.05,
-                               "Statistically significant difference",
-                               "No statistically significant difference")
+                               "Statistically significant difference between the means of the two groups",
+                               "No statistically significant difference between the means of the two groups")
             )
           }
         )
 
         control_tests <- dplyr::bind_rows(control_tests)
       }
-
-      # ---- Summary statistics ----
-      summary_table <- stat_df %>%
-        dplyr::group_by(plot_group) %>%
-        dplyr::summarise(
-          Group = dplyr::first(plot_group),
-          Mean = mean(value, na.rm = TRUE),
-          Median = median(value, na.rm = TRUE),
-          Standard_Deviation = sd(value, na.rm = TRUE),
-          Sample_Size = dplyr::n(),
-          Standard_Error = Standard_Deviation / sqrt(Sample_Size),
-          Minimum = min(value, na.rm = TRUE),
-          Maximum = max(value, na.rm = TRUE),
-          .groups = "drop"
-        ) %>%
-        dplyr::select(-plot_group)
 
       # ---- ANOVA ----
       anova_df <- NULL
@@ -478,7 +485,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         rownames(anova_df) <- NULL
 
         # ---- Tukey ----
-        if (!is.null(res$tukey)) {
+        if (!is.null(res$anova)) {
           tk <- TukeyHSD(fit)[[1]]
 
           tukey_df <- data.frame(
@@ -519,17 +526,30 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       # ---- Start PDF ----
       pdf(file, width = 8.5, height = 11)
 
+      # ---- Helper: format + wrap table ----
+      format_table <- function(df, digits = 4, wrap_width = 18) {
+
+        df[] <- lapply(df, function(col) {
+
+          # Round numeric columns
+          if (is.numeric(col)) {
+            col <- round(col, digits)
+          }
+
+          # Convert to character and wrap
+          col <- as.character(col)
+          stringr::str_wrap(col, width = wrap_width)
+        })
+
+        # Wrap column names too
+        colnames(df) <- stringr::str_wrap(colnames(df), width = wrap_width)
+
+        df
+      }
+
       # ---- Helper to print clean tables ----
       print_table <- function(title, table_df) {
-
         grid::grid.newpage()
-
-        # ---- Title ----
-        grid::grid.text(
-          title,
-          y = 0.95,
-          gp = grid::gpar(fontsize = 16, fontface = "bold")
-        )
 
         # ---- Zebra striping ----
         n_rows <- nrow(table_df)
@@ -539,58 +559,77 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         table_theme <- gridExtra::ttheme_minimal(
           base_size = 9,  # slightly smaller to prevent overflow
           core = list(
-            fg_params = list(hjust = 0.5, x = 0.5),
+            fg_params = list(hjust = 0.5, x = 0.5, fontsize = 8),
             bg_params = list(fill = core_bg, col = NA)
           ),
           colhead = list(
-            fg_params = list(fontface = "bold", hjust = 0.5),
+            fg_params = list(fontface = "bold", hjust = 0.5, fontsize = 9),
             bg_params = list(fill = "grey85")
           )
         )
 
-        # ---- Create table grob ----
+        # ---- Format + wrap before rendering ----
+        table_df <- format_table(table_df)
+
         tbl <- gridExtra::tableGrob(
           table_df,
           rows = NULL,
           theme = table_theme
         )
 
-        # ---- Scale table to fit page ----
-        max_width  <- grid::unit(0.95, "npc")
-        max_height <- grid::unit(0.80, "npc")
+        # ---- Let columns size naturally ----
+        tbl$widths <- grid::unit.pmax(tbl$widths, grid::unit(1.5, "cm"))
 
-        tbl_width  <- grid::convertWidth(sum(tbl$widths), "npc", valueOnly = TRUE)
-        tbl_height <- grid::convertHeight(sum(tbl$heights), "npc", valueOnly = TRUE)
+        # ---- If table is too wide, shrink proportionally ----
+        total_width <- sum(tbl$widths)
+        max_width <- grid::unit(0.95, "npc")
 
-        scale_factor <- min(
-          0.8 / tbl_width,
-          0.8 / tbl_height
-        )
-
-        if (scale_factor < 1) {
-          tbl$widths  <- tbl$widths * scale_factor
-          tbl$heights <- tbl$heights * scale_factor
+        if (grid::convertWidth(total_width, "npc", valueOnly = TRUE) > 0.95) {
+          scale_factor <- 0.95 / grid::convertWidth(total_width, "npc", valueOnly = TRUE)
+          tbl$widths <- tbl$widths * scale_factor
         }
 
-        # ---- Draw centered ----
-        grid::grid.draw(
-          grid::grobTree(
-            tbl,
-            vp = grid::viewport(
-              x = 0.5,
-              y = 0.45,
-              width = max_width,
-              height = max_height,
-              just = "center"
-            )
+        # ---- Final width clamp (prevents overflow for wide tables) ----
+        if (grid::convertWidth(sum(tbl$widths), "npc", valueOnly = TRUE) > 0.95) {
+          tbl$widths <- tbl$widths * 0.95 /
+            grid::convertWidth(sum(tbl$widths), "npc", valueOnly = TRUE)
+        }
+
+        # ---- Create title grob ----
+        title_grob <- grid::textGrob(
+          title,
+          gp = grid::gpar(fontsize = 14, fontface = "bold")
+        )
+
+        # ---- Combine title + table ----
+        combined <- gridExtra::arrangeGrob(
+          title_grob,
+          tbl,
+          ncol = 1,
+          heights = c(0.04, 0.96)
+        )
+
+        # ---- Draw flush to top ----
+        grid::pushViewport(
+          grid::viewport(
+            x = 0.5,
+            y = 0.99,
+            just = c("center", "top"),
+            width = grid::unit(0.95, "npc"),
+            height = grid::unit(0.98, "npc")
           )
         )
+
+        grid::grid.draw(combined)
+        grid::popViewport()
       }
 
       # ---- Render tables ----
       print_table("Summary Statistics", summary_table)
 
-      if (!is.null(control_tests) && nrow(control_tests) > 0) {
+      if ("T-test (Control vs Treatment)" %in% state$analysis_types &&
+          !is.null(control_tests) && nrow(control_tests) > 0) {
+
         print_table("Control Versus Treatment T-Tests", control_tests)
       }
 
@@ -609,7 +648,14 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         print_table("Tukey Post Hoc Test", tukey_df)
       }
 
-      if (!is.null(outlier_df)) {
+      if ("Outlier Detection" %in% state$analysis_types) {
+
+        if (is.null(outlier_df) || nrow(outlier_df) == 0) {
+          outlier_df <- data.frame(
+            Message = "No outliers detected using the IQR method"
+          )
+        }
+
         print_table("Detected Outliers", outlier_df)
       }
 

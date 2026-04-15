@@ -48,7 +48,7 @@ server_analysis <- function(input, output, session, state, plates) {
       session,
       "analysis_types",
       selected = if (input$analysis_select_all)
-        c("T-test", "ANOVA", "Tukey’s Post-Hoc Test", "Outlier Detection")
+        c("T-test (Control vs Treatment)", "ANOVA (Multigroup)", "Outlier Detection")
       else character(0)
     )
 
