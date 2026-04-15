@@ -662,4 +662,398 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       dev.off()
     }
   )
+  # --- Automated Report Generation ---
+  output$download_teaching_pdf <- downloadHandler(
+    filename = function() {
+      paste0(input$active_plate, "_report.pdf")
+    },
+
+    content = function(file) {
+
+      df_raw <- normalized_data() %>%
+        dplyr::filter(plate == input$active_plate)
+
+      df_analysis <- analysis_data()
+      plots <- selected_plots()
+      res <- analysis_results()
+
+      req(nrow(df_raw) > 0)
+
+      # =========================================================
+      # FLAGS
+      # =========================================================
+      has_boxplot  <- "Boxplot" %in% state$viz_types
+      has_bar      <- "Bar + Jitter Chart" %in% state$viz_types
+      has_sc       <- "Standard Curve" %in% state$viz_types
+
+      has_ttest    <- "T-test (Control vs Treatment)" %in% state$analysis_types
+      has_anova    <- "ANOVA (Multigroup)" %in% state$analysis_types
+      has_outliers <- "Outlier Detection" %in% state$analysis_types
+
+      # =========================================================
+      # DATA PREP
+      # =========================================================
+      stat_df <- df_analysis %>%
+        dplyr::filter(role != "standard") %>%
+        dplyr::filter(!is.na(value), !is.na(plot_group)) %>%
+        dplyr::distinct(plot_group, row, col, .keep_all = TRUE)
+
+      stat_df$plot_group <- factor(stat_df$plot_group)
+
+      blank_mean <- mean(df_raw$value[df_raw$role == "blank"], na.rm = TRUE)
+      control_mean <- mean(df_raw$value[df_raw$role == "control"], na.rm = TRUE)
+
+      # =========================================================
+      # PAGE + FIGURE ENV
+      # =========================================================
+      page_env <- new.env(); page_env$page <- 0
+      fig_env <- new.env(); fig_env$i <- 0
+
+      next_fig <- function() {
+        fig_env$i <- fig_env$i + 1
+        paste0("Figure ", fig_env$i)
+      }
+
+      # =========================================================
+      # HEADER (FIXED 12pt APA RUNNING HEAD)
+      # =========================================================
+      draw_header <- function() {
+        page_env$page <- page_env$page + 1
+
+        if (page_env$page > 1) {
+
+          grid::grid.text(
+            "PLATE ANALYSIS REPORT",
+            x = 0.02, y = 0.985,
+            just = "left",
+            gp = grid::gpar(
+              fontsize = 12,   # FIXED APA RUNNING HEAD SIZE
+              fontfamily = "serif"
+            )
+          )
+
+          grid::grid.text(
+            page_env$page - 1,
+            x = 0.98, y = 0.985,
+            just = "right",
+            gp = grid::gpar(fontsize = 10, fontfamily = "serif")
+          )
+        }
+      }
+
+      # =========================================================
+      # TEXT PAGE (CENTERED CONSISTENCY FIX)
+      # =========================================================
+      draw_text_page <- function(title, text_lines) {
+
+        grid::grid.newpage()
+        draw_header()
+
+        body <- paste(
+          stringr::str_wrap(paste(text_lines, collapse = " "), 95),
+          collapse = "\n"
+        )
+
+        gridExtra::grid.arrange(
+          grid::textGrob(
+            title,
+            gp = grid::gpar(fontsize = 16, fontface = "bold", fontfamily = "serif")
+          ),
+          grid::textGrob(
+            body,
+            x = 0.5, y = 0.5,
+            just = "center",
+            gp = grid::gpar(
+              fontsize = 11,
+              lineheight = 1.6,
+              fontfamily = "serif"
+            )
+          ),
+          ncol = 1,
+          heights = c(0.1, 0.9)
+        )
+      }
+
+      # =========================================================
+      # TABLE PAGE (CENTER FIX)
+      # =========================================================
+      draw_table_page <- function(title, df) {
+
+        grid::grid.newpage()
+        draw_header()
+
+        if (is.null(df) || nrow(df) == 0) {
+          df <- data.frame(Message = "No data available")
+        }
+
+        zebra <- rep(c("grey95", "white"), length.out = nrow(df))
+
+        tbl <- gridExtra::tableGrob(
+          df,
+          rows = NULL,
+          theme = gridExtra::ttheme_minimal(
+            base_size = 9,
+            core = list(bg_params = list(fill = zebra, col = NA)),
+            colhead = list(fg_params = list(fontface = "bold"))
+          )
+        )
+
+        gridExtra::grid.arrange(
+          grid::textGrob(
+            title,
+            gp = grid::gpar(fontsize = 13, fontface = "bold", fontfamily = "serif")
+          ),
+          tbl,
+          ncol = 1,
+          heights = c(0.07, 0.93)
+        )
+      }
+
+      # =========================================================
+      # PLOT PAGE (FIXED VIEWPORT AS REQUESTED)
+      # =========================================================
+      draw_plot_page <- function(plot_obj, title, caption_text) {
+
+        grid::grid.newpage()
+        draw_header()
+
+        vp <- grid::viewport(
+          x = 0.5, y = 0.5,
+          width = 0.8, height = 0.6,
+          just = "center"
+        )
+
+        plot_grob <- if (inherits(plot_obj, "grob") || inherits(plot_obj, "gtable")) {
+          plot_obj
+        } else ggplot2::ggplotGrob(plot_obj)
+
+        caption <- paste0(next_fig(), ". ", stringr::str_wrap(caption_text, 110))
+
+        gridExtra::grid.arrange(
+          grid::textGrob(
+            title,
+            gp = grid::gpar(fontsize = 14, fontface = "bold", fontfamily = "serif")
+          ),
+          plot_grob,
+          grid::textGrob(
+            caption,
+            gp = grid::gpar(fontsize = 9, fontfamily = "serif")
+          ),
+          ncol = 1,
+          heights = c(0.08, 0.84, 0.08),
+          vp = vp
+        )
+      }
+
+      # =========================================================
+      # TABLES
+      # =========================================================
+      summary_table <- stat_df %>%
+        dplyr::group_by(plot_group) %>%
+        dplyr::summarise(
+          Group = dplyr::first(plot_group),
+          Mean = mean(value),
+          SD = sd(value),
+          n = dplyr::n(),
+          SE = SD / sqrt(n),
+          .groups = "drop"
+        )
+
+      normalized_table <- stat_df %>%
+        dplyr::transmute(
+          Row = row,
+          Column = col,
+          Group = plot_group,
+          Role = role,
+          Raw_Value = value,
+          Normalized_Value = value
+        )
+
+      # =========================================================
+      # PDF START
+      # =========================================================
+      pdf(file, width = 8.5, height = 11, onefile = TRUE)
+
+      # =========================================================
+      # TITLE PAGE (UNCHANGED)
+      # =========================================================
+      grid::grid.newpage()
+
+      grid::grid.text(
+        "Plate Analysis Report",
+        x = 0.5, y = 0.6,
+        gp = grid::gpar(fontsize = 22, fontface = "bold", fontfamily = "serif")
+      )
+
+      grid::grid.text(
+        paste("Plate ID:", input$active_plate,
+              "\nGenerated:", format(Sys.time(), "%Y-%m-%d %H:%M")),
+        x = 0.5, y = 0.45,
+        gp = grid::gpar(fontsize = 12, fontfamily = "serif")
+      )
+
+      # =========================================================
+      # TABLE OF CONTENTS
+      # =========================================================
+      draw_text_page("Table of Contents",
+                     c(
+                       "1. Methods",
+                       "2. Plate Layout",
+                       "3. Normalized Dataset",
+                       "4. Summary Statistics",
+                       "5. Visualizations",
+                       "6. Statistical Tests",
+                       "7. Standard Curve & Values",
+                       "8. Discussion",
+                       "9. References"
+                     ))
+
+      # =========================================================
+      # METHODS
+      # =========================================================
+      draw_text_page("Methods",
+                     c(
+                       paste0("Blank mean = ", round(blank_mean, 4),
+                              ", Control mean = ", round(control_mean, 4), "."),
+                       "Normalization: (Raw Value - Blank Mean) / (Control Mean - Blank Mean).",
+                       if (has_ttest) "Welch t-tests were used for control vs treatment comparisons.",
+                       if (has_ttest) "Pairwise comparisons used BH-adjusted p-values.",
+                       if (has_anova) "One-way ANOVA with Tukey post hoc tests was performed.",
+                       if (has_outliers) "Outliers were identified using the 1.5 × IQR rule."
+                     ))
+
+      # =========================================================
+      # PLATE LAYOUT
+      # =========================================================
+      if (!is.null(plots[["Plate Layout"]])) {
+        draw_plot_page(
+          plots[["Plate Layout"]],
+          "Plate Layout",
+          "Experimental plate layout showing controls, standards, and treatment wells."
+        )
+      }
+
+      # =========================================================
+      # NORMALIZED DATA
+      # =========================================================
+      draw_table_page("Normalized Dataset (Subset)", head(normalized_table, 25))
+
+      # =========================================================
+      # SUMMARY
+      # =========================================================
+      draw_table_page("Summary Statistics", summary_table)
+
+      # =========================================================
+      # VISUALIZATIONS
+      # =========================================================
+      if (has_boxplot && !is.null(plots[["Boxplot"]])) {
+        draw_plot_page(
+          plots[["Boxplot"]],
+          "Boxplot of Group Distributions",
+          "Distribution of normalized values across groups."
+        )
+      }
+
+      if (has_bar && !is.null(plots[["Bar + Jitter"]])) {
+        draw_plot_page(
+          plots[["Bar + Jitter"]],
+          "Bar + Jitter Plot",
+          "Mean values with individual replicate measurements."
+        )
+      }
+
+      # =========================================================
+      # TESTS (UNCHANGED LOGIC, FORMATTED OUTPUTS)
+      # =========================================================
+      if (has_ttest && !is.null(res$ttest)) {
+
+        ctrl_df <- as.data.frame(res$ttest$p.value)
+        ctrl_df$Comparison <- rownames(ctrl_df)
+        rownames(ctrl_df) <- NULL
+
+        draw_table_page("Control vs Treatment T-Tests", ctrl_df)
+      }
+
+      if (!is.null(res$ttest)) {
+
+        pair_df <- as.data.frame(res$ttest$p.value)
+        pair_df$Group <- rownames(pair_df)
+        rownames(pair_df) <- NULL
+
+        draw_table_page("Pairwise T-Test Adjusted P-Values", pair_df)
+      }
+
+      if (has_anova && !is.null(res$anova)) {
+
+        fit <- aov(value ~ plot_group, data = stat_df)
+        a <- summary(fit)[[1]]
+
+        anova_df <- data.frame(
+          Term = rownames(a),
+          DF = a$Df,
+          Sum_Sq = a$`Sum Sq`,
+          Mean_Sq = a$`Mean Sq`,
+          F_value = a$`F value`,
+          P_value = a$`Pr(>F)`
+        )
+
+        draw_table_page("One-Way ANOVA", anova_df)
+      }
+
+      if (has_outliers) {
+
+        out_df <- stat_df %>%
+          dplyr::group_by(plot_group) %>%
+          dplyr::mutate(
+            Q1 = quantile(value, 0.25),
+            Q3 = quantile(value, 0.75),
+            IQR = Q3 - Q1,
+            Lower = Q1 - 1.5 * IQR,
+            Upper = Q3 + 1.5 * IQR,
+            Outlier = value < Lower | value > Upper
+          ) %>%
+          dplyr::filter(Outlier) %>%
+          dplyr::select(Group = plot_group, Value = value, Lower, Upper)
+
+        if (nrow(out_df) == 0) {
+          out_df <- data.frame(Message = "No outliers detected")
+        }
+
+        draw_table_page("Outlier Detection", out_df)
+      }
+
+      # =========================================================
+      # STANDARD CURVE SECTION
+      # =========================================================
+      if (has_sc && !is.null(plots[["Standard Curve"]])) {
+
+        draw_plot_page(
+          plots[["Standard Curve"]],
+          "Standard Curve",
+          "Calibration curve with regression fit for standard concentration estimation."
+        )
+      }
+
+      # =========================================================
+      # DISCUSSION
+      # =========================================================
+      draw_text_page("Discussion",
+                     c(
+                       "Results integrate statistical inference and visualization for interpretation of experimental effects.",
+                       "All outputs are derived from a single normalized dataset ensuring internal consistency."
+                     ))
+
+      # =========================================================
+      # REFERENCES
+      # =========================================================
+      draw_text_page("References",
+                     c(
+                       "R Core Team (2025). R: Statistical Computing Environment.",
+                       "Posit Team (2025). Shiny: Web Application Framework for R.",
+                       "Schrameck, A. (2026). Plate analysis pipeline development."
+                     ))
+
+      dev.off()
+    }
+  )
 }
