@@ -4,7 +4,7 @@
 \alias{server_analysis}
 \title{Analysis Screen Server Logic}
 \usage{
-server_analysis(input, output, session, state, plates)
+server_analysis(input, output, session, state, plates, normalized_data)
 }
 \arguments{
 \item{input}{Shiny input object}

@@ -170,7 +170,7 @@ app_server <- function(input, output, session) {
   server_upload(input, output, session, state, plates)
   server_inspect(input, output, session, state, plates)
   normalized_data <- server_normalize(input, output, session, state, plates, group_map)
-  server_analysis(input, output, session, state, plates)
+  server_analysis(input, output, session, state, plates, normalized_data)
   server_results(input, output, session, state, plates, normalized_data)
 
   # ---- USER GUIDE ----

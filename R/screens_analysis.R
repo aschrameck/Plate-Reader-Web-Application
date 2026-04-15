@@ -78,6 +78,12 @@ analysis_ui <- function() {
                 "Select All",
                 value = FALSE
               )
+            ),
+
+            # ---- Validation Messages ----
+            div(
+              class = "mt-3",
+              uiOutput("analysis_messages")
             )
           )
         )
@@ -96,7 +102,7 @@ analysis_ui <- function() {
           div(
             class = "d-flex justify-content-between",
             actionButton("to_normalize", "Back", class = "btn-secondary"),
-            actionButton("to_results", "Next", class = "btn-primary")
+            actionButton("to_results", "Next", class = "btn-primary", disabled =TRUE)
           )
         )
       )
