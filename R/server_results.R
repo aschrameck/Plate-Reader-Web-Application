@@ -125,23 +125,122 @@ server_results <- function(input, output, session, state, plates, normalized_dat
   }
 
   make_bar_jitter <- function(df) {
+
     bar_df <- df %>%
       dplyr::filter(role != "standard") %>%
       dplyr::distinct(plot_group, row, col, .keep_all = TRUE)
 
-    ggplot(bar_df, aes(x = plot_group, y = value, fill = plot_group)) +
-      stat_summary(fun = mean, geom = "bar", alpha = 0.8, color = "black", width = 0.6) +
-      geom_jitter(width = 0.15, size = 2, alpha = 0.7) +
+    # ---- Summary stats ----
+    sum_df <- bar_df %>%
+      dplyr::group_by(plot_group) %>%
+      dplyr::summarise(
+        mean = mean(value, na.rm = TRUE),
+        sd   = sd(value, na.rm = TRUE),
+        n    = dplyr::n(),
+        se   = sd / sqrt(n),
+        .groups = "drop"
+      )
+
+    # ---- Build significance labels from pairwise t-tests ----
+    sig_df <- NULL
+
+    if ("T-test (Control vs Treatment)" %in% state$analysis_types &&
+        nlevels(factor(bar_df$plot_group)) >= 2) {
+
+      control_group <- levels(factor(bar_df$plot_group))[
+        grepl("Control", levels(factor(bar_df$plot_group)))
+      ][1]
+
+      if (!is.na(control_group)) {
+
+        others <- setdiff(levels(factor(bar_df$plot_group)), control_group)
+
+        sig_df <- lapply(seq_along(others), function(i) {
+
+          g <- others[i]
+
+          x <- bar_df$value[bar_df$plot_group == control_group]
+          y <- bar_df$value[bar_df$plot_group == g]
+
+          if (length(x) < 2 || length(y) < 2) return(NULL)
+
+          p <- t.test(x, y)$p.value
+
+          stars <- dplyr::case_when(
+            p < 0.001 ~ "***",
+            p < 0.01  ~ "**",
+            p < 0.05  ~ "*",
+            TRUE ~ "ns"
+          )
+
+          ymax <- max(sum_df$mean + sum_df$se, na.rm = TRUE)
+
+          data.frame(
+            group1 = control_group,
+            group2 = g,
+            x1 = which(levels(factor(bar_df$plot_group)) == control_group),
+            x2 = which(levels(factor(bar_df$plot_group)) == g),
+            y  = ymax + (i * ymax * 0.08),
+            label = stars
+          )
+        }) %>% dplyr::bind_rows()
+      }
+    }
+
+    p <- ggplot(sum_df, aes(x = plot_group, y = mean, fill = plot_group)) +
+      geom_col(alpha = 0.85, color = "black", width = 0.65) +
+      geom_errorbar(
+        aes(ymin = mean - se, ymax = mean + se),
+        width = 0.18,
+        linewidth = 0.6
+      ) +
       scale_fill_manual(values = pub_colors) +
       labs(
-        title = "Normalized Values by Group with Individual Observations",
+        title = "Normalized Values by Group",
         x = "Group",
-        y = "Normalized Value"
+        y = "Normalized Value ± SE"
       ) +
       scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 12)) +
-      pub_theme() +
-      coord_cartesian(ylim = c(min(bar_df$value, na.rm = TRUE) * 0.9,
-                               max(bar_df$value, na.rm = TRUE) * 1.2))
+      pub_theme()
+
+    # ---- Add significance brackets ----
+    if (!is.null(sig_df) && nrow(sig_df) > 0) {
+
+      p <- p +
+        geom_segment(
+          data = sig_df,
+          aes(x = x1, xend = x2, y = y, yend = y),
+          inherit.aes = FALSE
+        ) +
+        geom_segment(
+          data = sig_df,
+          aes(x = x1, xend = x1, y = y * 0.98, yend = y),
+          inherit.aes = FALSE
+        ) +
+        geom_segment(
+          data = sig_df,
+          aes(x = x2, xend = x2, y = y * 0.98, yend = y),
+          inherit.aes = FALSE
+        ) +
+        geom_text(
+          data = sig_df,
+          aes(x = (x1 + x2) / 2, y = y * 1.02, label = label),
+          inherit.aes = FALSE,
+          size = 5,
+          fontface = "bold"
+        )
+    }
+
+    p +
+      coord_cartesian(
+        ylim = c(
+          min(0, min(sum_df$mean - sum_df$se, na.rm = TRUE)),
+          max(
+            sum_df$mean + sum_df$se,
+            ifelse(is.null(sig_df), 0, max(sig_df$y) * 1.08)
+          )
+        )
+      )
   }
 
   make_standard_curve <- function(df) {
@@ -331,9 +430,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
     # ---- T-TESTS ----
     if ("T-test (Control vs Treatment)" %in% state$analysis_types) {
-      groups <- levels(stat_df$plot_group)
 
-      # Pairwise t-tests
       ttest_res <- pairwise.t.test(
         stat_df$value,
         stat_df$plot_group,
@@ -341,6 +438,35 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       )
 
       results$ttest <- ttest_res
+
+      control_group <- levels(stat_df$plot_group)[
+        grepl("Control", levels(stat_df$plot_group))
+      ][1]
+
+      if (!is.na(control_group)) {
+
+        ctrl_tests <- lapply(
+          setdiff(levels(stat_df$plot_group), control_group),
+          function(g) {
+
+            x <- stat_df$value[stat_df$plot_group == control_group]
+            y <- stat_df$value[stat_df$plot_group == g]
+
+            if (length(x) < 2 || length(y) < 2) return(NULL)
+
+            tt <- t.test(x, y)
+
+            data.frame(
+              Comparison = paste(control_group, "vs", g),
+              Mean_Control = mean(x),
+              Mean_Treatment = mean(y),
+              P_Value = tt$p.value
+            )
+          }
+        )
+
+        results$control_tests <- dplyr::bind_rows(ctrl_tests)
+      }
     }
 
     # ---- ANOVA ----
@@ -750,28 +876,43 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         draw_header()
 
         body <- paste(
-          stringr::str_wrap(paste(text_lines, collapse = " "), 95),
+          stringr::str_wrap(
+            paste(text_lines[!is.na(text_lines)], collapse = " "),
+            width = 85
+          ),
           collapse = "\n"
         )
 
-        gridExtra::grid.arrange(
-          grid::textGrob(
-            title,
-            gp = grid::gpar(fontsize = 16, fontface = "bold", fontfamily = "serif")
-          ),
-          grid::textGrob(
-            body,
+        grid::pushViewport(
+          grid::viewport(
             x = 0.5, y = 0.5,
-            just = "center",
-            gp = grid::gpar(
-              fontsize = 11,
-              lineheight = 1.6,
-              fontfamily = "serif"
-            )
-          ),
-          ncol = 1,
-          heights = c(0.1, 0.9)
+            width = 0.82, height = 0.88
+          )
         )
+
+        grid::grid.text(
+          title,
+          x = 0, y = 1,
+          just = c("left", "top"),
+          gp = grid::gpar(
+            fontsize = 14,
+            fontface = "bold",
+            fontfamily = "serif"
+          )
+        )
+
+        grid::grid.text(
+          body,
+          x = 0, y = 0.94,
+          just = c("left", "top"),
+          gp = grid::gpar(
+            fontsize = 12,
+            lineheight = 1.8,
+            fontfamily = "serif"
+          )
+        )
+
+        grid::popViewport()
       }
 
       # =========================================================
@@ -911,16 +1052,32 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       # =========================================================
       # METHODS
       # =========================================================
-      draw_text_page("Methods",
-                     c(
-                       paste0("Blank mean = ", round(blank_mean, 4),
-                              ", Control mean = ", round(control_mean, 4), "."),
-                       "Normalization: (Raw Value - Blank Mean) / (Control Mean - Blank Mean).",
-                       if (has_ttest) "Welch t-tests were used for control vs treatment comparisons.",
-                       if (has_ttest) "Pairwise comparisons used BH-adjusted p-values.",
-                       if (has_anova) "One-way ANOVA with Tukey post hoc tests was performed.",
-                       if (has_outliers) "Outliers were identified using the 1.5 × IQR rule."
-                     ))
+      draw_text_page(
+        "Methods",
+        c(
+          paste0(
+            "Data from plate ", input$active_plate,
+            " were processed using the predefined normalization workflow. "
+          ),
+          paste0(
+            "The mean blank signal was ",
+            round(blank_mean, 4),
+            ", and the mean control signal was ",
+            round(control_mean, 4), ". "
+          ),
+          "Normalized values were calculated as (Raw Value - Blank Mean) / (Control Mean - Blank Mean), allowing all groups to be interpreted on a common relative scale. ",
+          if (has_boxplot)
+            "Distributional characteristics were evaluated using boxplots to visualize medians, spread, and potential extreme values. ",
+          if (has_bar)
+            "Group means and associated standard errors were visualized using bar charts with inferential significance annotations. ",
+          if (has_ttest)
+            "Welch independent-samples t-tests were used for control-versus-treatment comparisons because they are robust to unequal variance. Benjamini-Hochberg correction was applied to pairwise comparisons where relevant. ",
+          if (has_anova)
+            "When more than two groups were present, one-way ANOVA was used to test for omnibus differences among means, followed by Tukey-adjusted post hoc comparisons. ",
+          if (has_outliers)
+            "Potential outliers were screened using the 1.5 × IQR rule within each group."
+        )
+      )
 
       # =========================================================
       # PLATE LAYOUT
@@ -957,8 +1114,8 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       if (has_bar && !is.null(plots[["Bar + Jitter"]])) {
         draw_plot_page(
           plots[["Bar + Jitter"]],
-          "Bar + Jitter Plot",
-          "Mean values with individual replicate measurements."
+          "Bar Chart with Error Bars",
+          "Bars represent group means. Error bars indicate standard error of the mean. Brackets and asterisks denote statistical comparisons versus the control group (* p < .05, ** p < .01, *** p < .001)."
         )
       }
 
@@ -1037,11 +1194,19 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       # =========================================================
       # DISCUSSION
       # =========================================================
-      draw_text_page("Discussion",
-                     c(
-                       "Results integrate statistical inference and visualization for interpretation of experimental effects.",
-                       "All outputs are derived from a single normalized dataset ensuring internal consistency."
-                     ))
+      draw_text_page(
+        "Discussion",
+        c(
+          "This report integrates descriptive statistics, visualization, and inferential testing into a unified interpretation of the experimental plate. ",
+          if (has_ttest)
+            "Control-versus-treatment comparisons provide direct evidence regarding whether observed treatment responses differ beyond expected sampling variation. ",
+          if (has_anova)
+            "The multigroup framework evaluates whether any condition differs overall, while post hoc testing identifies the specific pairs responsible for the omnibus effect. ",
+          if (has_outliers)
+            "Outlier screening should be interpreted in experimental context, as biologically meaningful responses can occasionally appear statistically extreme. ",
+          "Because all analyses were generated from the same normalized dataset, consistency is maintained across tables, figures, and conclusions. Final interpretation should consider sample size, assay variability, and biological relevance in addition to p-values alone."
+        )
+      )
 
       # =========================================================
       # REFERENCES
