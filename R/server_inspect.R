@@ -136,12 +136,16 @@ server_inspect <- function(input, output, session, state, plates) {
     other_labels <- setdiff(all_labels, std_labels)
 
     # Standard ordering
-    std_df <- plate %>% filter(!is.na(standards)) %>%
-      mutate(label = ifelse(!is.na(standard_units) & standard_units != "",
-                            paste0("STD__", standards, " ", standard_units),
-                            paste0("STD__", standards))) %>%
-      distinct(label, standards) %>%
-      arrange(standards)
+    std_df <- plate %>%
+      dplyr::filter(is_standard, !is.na(standards)) %>%
+      dplyr::mutate(
+        standards_num = suppressWarnings(as.numeric(standards)),
+        label = ifelse(!is.na(standard_units) & standard_units != "",
+                       paste0("STD__", standards, " ", standard_units),
+                       paste0("STD__", standards))
+      ) %>%
+      dplyr::distinct(label, standards, standards_num) %>%
+      dplyr::arrange(standards_num, standards)
 
     # Color palettes
     cat_colors <- if (length(other_labels) > 0) setNames(scales::hue_pal()(length(other_labels)), other_labels) else c()
