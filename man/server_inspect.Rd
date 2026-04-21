@@ -45,7 +45,6 @@ inspect_ui
 Other Server Screens: 
 \code{\link{server_analysis}()},
 \code{\link{server_normalize}()},
-\code{\link{server_results}()},
-\code{\link{server_upload}()}
+\code{\link{server_results}()}
 }
 \concept{Server Screens}

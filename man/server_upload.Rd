@@ -23,28 +23,3 @@ NULL; updates \code{state} and \code{plates} reactively
 \description{
 Handles file input, parsing, and initialization of plate data for the app.
 }
-\details{
-This function manages:
-\itemize{
-\item File upload events
-\item Parsing raw plate reader files
-\item Populating the plates reactive structure
-\item Transitioning to the inspection workflow after upload
-}
-
-Expected behavior:
-\itemize{
-\item Uploaded files are validated for format compatibility
-\item On success, plate names are registered for downstream screens
-}
-}
-\seealso{
-upload_ui
-
-Other Server Screens: 
-\code{\link{server_analysis}()},
-\code{\link{server_inspect}()},
-\code{\link{server_normalize}()},
-\code{\link{server_results}()}
-}
-\concept{Server Screens}

@@ -8,21 +8,7 @@
 #' @param state ReactiveValues object storing application state
 #' @param plates Reactive object for storing loaded plate data
 #'
-#' @details
-#' This function manages:
-#' - File upload events
-#' - Parsing raw plate reader files
-#' - Populating the plates reactive structure
-#' - Transitioning to the inspection workflow after upload
-#'
-#' Expected behavior:
-#' - Uploaded files are validated for format compatibility
-#' - On success, plate names are registered for downstream screens
-#'
 #' @return NULL; updates `state` and `plates` reactively
-#'
-#' @seealso upload_ui
-#' @family Server Screens
 
 server_upload <- function(input, output, session, state, plates) {
 
@@ -52,7 +38,7 @@ server_upload <- function(input, output, session, state, plates) {
   # ---- File validation ----
   files_valid <- reactive({
     req(input$data_files)
-    ext <- tools::file_ext(input$data_files$name)
+    ext <- tolower(tools::file_ext(input$data_files$name))
     if (any(!ext %in% allowed_ext)) return(FALSE)
     if (any(input$data_files$size == 0)) return(FALSE)
     TRUE
@@ -64,24 +50,34 @@ server_upload <- function(input, output, session, state, plates) {
   })
 
   # ---- Read Files + Parse Plates ----
-  observeEvent(input$data_files, {
+  observeEvent(list(input$data_files, input$has_header), {
 
     req(files_valid())
 
     plate_list <- list()
+
+    # -----------------------------
+    # Helper: contiguous runs
+    # -----------------------------
+    get_runs <- function(x) {
+      idx <- which(x)
+      if (length(idx) == 0) return(list())
+      splits <- cumsum(c(1, diff(idx) > 1))
+      split(idx, splits)
+    }
 
     for (i in seq_len(nrow(input$data_files))) {
 
       path  <- input$data_files$datapath[i]
       fname <- input$data_files$name[i]
       name  <- tools::file_path_sans_ext(fname)
-      ext   <- tools::file_ext(fname)
+      ext   <- tolower(tools::file_ext(fname))
 
       raw <- tryCatch({
         switch(
           ext,
-          csv  = read.csv(path, header = FALSE, stringsAsFactors = FALSE),
-          txt  = read.delim(path, header = FALSE, stringsAsFactors = FALSE),
+          csv  = read.csv(path, header = FALSE, stringsAsFactors = FALSE, na.strings = c("", "NA")),
+          txt  = read.table(path, header = FALSE, fill = TRUE, stringsAsFactors = FALSE, na.strings = c("", "NA")),
           xlsx = readxl::read_xlsx(path, col_names = FALSE)
         )
       }, error = function(e) {
@@ -93,82 +89,96 @@ server_upload <- function(input, output, session, state, plates) {
         return(NULL)
       })
 
-      # Failed to read error
       if (is.null(raw)) next
 
-      # Save as data frame
-      values <- as.data.frame(raw)
+      raw <- as.data.frame(raw, stringsAsFactors = FALSE)
+      raw[raw == ""] <- NA
 
-      # ---- Crop at first completely blank row ----
-      blank_row <- apply(values, 1, function(r) {
-        all(is.na(r) | trimws(as.character(r)) == "")
-      })
+      # -----------------------------
+      # Detect occupied rows/cols
+      # -----------------------------
+      nonempty_rows <- apply(raw, 1, function(r) any(!is.na(r)))
+      nonempty_cols <- apply(raw, 2, function(c) any(!is.na(c)))
 
-      if (any(blank_row)) {
-        first_blank_row <- which(blank_row)[1]
-        values <- values[seq_len(first_blank_row - 1), , drop = FALSE]
+      row_blocks <- get_runs(nonempty_rows)
+      col_blocks <- get_runs(nonempty_cols)
+
+      file_plate_count <- 1
+
+      # -----------------------------
+      # Extract all separated tables
+      # -----------------------------
+      for (rb in row_blocks) {
+        for (cb in col_blocks) {
+
+          values <- raw[rb, cb, drop = FALSE]
+
+          if (!any(!is.na(values))) next
+
+          # Keep full detected rectangle so internal NAs remain visible
+          values <- raw[min(rb):max(rb), min(cb):max(cb), drop = FALSE]
+
+          if (nrow(values) == 0 || ncol(values) == 0) next
+
+          # -----------------------------
+          # Handle headers
+          # -----------------------------
+          if (isTRUE(input$has_header)) {
+
+            # Remove first row / first col entirely
+            if (nrow(values) > 1) values <- values[-1, , drop = FALSE]
+            if (ncol(values) > 1) values <- values[, -1, drop = FALSE]
+
+            if (nrow(values) == 0 || ncol(values) == 0) next
+
+            rownames(values) <- LETTERS[seq_len(nrow(values))]
+            colnames(values) <- seq_len(ncol(values))
+
+          } else {
+            rownames(values) <- LETTERS[seq_len(nrow(values))]
+            colnames(values) <- seq_len(ncol(values))
+          }
+
+          # -----------------------------
+          # Convert all non-numeric to NA
+          # -----------------------------
+          values[] <- lapply(values, function(x) suppressWarnings(as.numeric(x)))
+
+          # -----------------------------
+          # Convert to long format
+          # -----------------------------
+          plate <- values %>%
+            tibble::rownames_to_column("row") %>%
+            tidyr::pivot_longer(
+              -row,
+              names_to = "col",
+              values_to = "value"
+            )
+
+          plate$row <- as.character(plate$row)
+          plate$col <- as.integer(plate$col)
+
+          # -----------------------------
+          # Initialize metadata
+          # -----------------------------
+          plate$is_control     <- FALSE
+          plate$is_blank       <- FALSE
+          plate$is_label       <- FALSE
+          plate$is_standard    <- FALSE
+          plate$labels         <- replicate(nrow(plate), character(0), simplify = FALSE)
+          plate$control_groups <- replicate(nrow(plate), character(0), simplify = FALSE)
+          plate$blanks         <- replicate(nrow(plate), character(0), simplify = FALSE)
+          plate$standards      <- NA_real_
+          plate$standard_units <- NA_character_
+
+          plate_name <- paste0("Plate_", file_plate_count, "_", name)
+
+          plate$plate <- plate_name
+          plate_list[[plate_name]] <- plate
+
+          file_plate_count <- file_plate_count + 1
+        }
       }
-
-      # ---- Crop at first completely blank column ----
-      blank_col <- apply(values, 2, function(c) {
-        all(is.na(c) | trimws(as.character(c)) == "")
-      })
-
-      if (any(blank_col)) {
-        first_blank_col <- which(blank_col)[1]
-        values <- values[, seq_len(first_blank_col - 1), drop = FALSE]
-      }
-
-      # -- Handle headers ---
-      if(isTRUE(input$has_headers)) {
-        # Extract labels
-        new_colnames <- as.character(values[1, -1])
-        new_rownames <- as.character(values[-1, 1])
-
-        # Remove header row + column
-        values <- values[-1, -1, drop = FALSE]
-
-        # Assign labels (remove empty columns)
-        new_colnames[new_colnames == "" | is.na(new_colnames)] <- NA
-        keep_cols <- !is.na(new_colnames)
-
-        values       <- values[, keep_cols, drop = FALSE]
-        new_colnames <- new_colnames[keep_cols]
-
-        colnames(values) <- new_colnames
-        rownames(values) <- new_rownames
-      } else {
-        rownames(values) <- LETTERS[seq_len(nrow(values))]
-        colnames(values) <- seq_len(ncol(values))
-      }
-
-      # Ensure all columns are numeric
-      values[] <- lapply(values, function(x) suppressWarnings(as.numeric(x)))
-
-      # --- Convert to long format ---
-      plate <- values %>%
-        tibble::rownames_to_column("row") %>%
-        tidyr::pivot_longer(
-          -row,
-          names_to = "col",
-          values_to = "value"
-        )
-
-      plate$row   <- as.character(plate$row)
-      plate$col   <- as.integer(plate$col)
-
-      plate$is_control     <- FALSE
-      plate$is_blank       <- FALSE
-      plate$is_label       <- FALSE
-      plate$is_standard    <- FALSE
-      plate$labels         <- replicate(nrow(plate), character(0), simplify = FALSE)
-      plate$control_groups <- replicate(nrow(plate), character(0), simplify = FALSE)
-      plate$blanks         <- replicate(nrow(plate), character(0), simplify = FALSE)
-      plate$standards      <- NA_real_
-      plate$plate          <- name
-      plate$standard_units <- NA_character_
-
-      plate_list[[name]] <- plate
     }
 
     validate(
@@ -176,5 +186,6 @@ server_upload <- function(input, output, session, state, plates) {
     )
 
     plates(plate_list)
-  })
+  },
+  ignoreInit = FALSE)
 }

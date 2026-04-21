@@ -75,7 +75,7 @@ upload_ui <- function() {
             checkboxInput(
               "has_header",
               "File contains headers",
-              value = TRUE
+              value = FALSE
             ),
 
             div(
