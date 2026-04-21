@@ -788,6 +788,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       dev.off()
     }
   )
+
   # --- Automated Report Generation ---
   output$download_teaching_pdf <- downloadHandler(
     filename = function() {
@@ -805,9 +806,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
       req(nrow(df_raw) > 0)
 
-      # =========================================================
-      # FLAGS
-      # =========================================================
+      # Flags
       has_boxplot  <- "Boxplot" %in% state$viz_types
       has_bar      <- "Bar + Jitter Chart" %in% state$viz_types
       has_sc       <- "Standard Curve" %in% state$viz_types
@@ -816,9 +815,8 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       has_anova    <- "ANOVA (Multigroup)" %in% state$analysis_types
       has_outliers <- "Outlier Detection" %in% state$analysis_types
 
-      # =========================================================
-      # DATA PREP
-      # =========================================================
+
+      # Data Prep
       stat_df <- df_analysis %>%
         dplyr::filter(role != "standard") %>%
         dplyr::filter(!is.na(value), !is.na(plot_group)) %>%
@@ -826,67 +824,35 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
       stat_df$plot_group <- factor(stat_df$plot_group)
 
-      blank_mean <- mean(df_raw$value[df_raw$role == "blank"], na.rm = TRUE)
+      blank_mean   <- mean(df_raw$value[df_raw$role == "blank"], na.rm = TRUE)
       control_mean <- mean(df_raw$value[df_raw$role == "control"], na.rm = TRUE)
 
-      # =========================================================
-      # PAGE + FIGURE ENV
-      # =========================================================
+      # Figure numbering
       page_env <- new.env(); page_env$page <- 0
-      fig_env <- new.env(); fig_env$i <- 0
+      fig_env  <- new.env(); fig_env$i <- 0
 
       next_fig <- function() {
         fig_env$i <- fig_env$i + 1
         paste0("Figure ", fig_env$i)
       }
 
-      # =========================================================
-      # HEADER (FIXED 12pt APA RUNNING HEAD)
-      # =========================================================
-      draw_header <- function() {
-        page_env$page <- page_env$page + 1
-
-        if (page_env$page > 1) {
-
-          grid::grid.text(
-            "PLATE ANALYSIS REPORT",
-            x = 0.02, y = 0.985,
-            just = "left",
-            gp = grid::gpar(
-              fontsize = 12,   # FIXED APA RUNNING HEAD SIZE
-              fontfamily = "serif"
-            )
-          )
-
-          grid::grid.text(
-            page_env$page - 1,
-            x = 0.98, y = 0.985,
-            just = "right",
-            gp = grid::gpar(fontsize = 10, fontfamily = "serif")
-          )
-        }
-      }
-
-      # =========================================================
-      # TEXT PAGE (CENTERED CONSISTENCY FIX)
-      # =========================================================
+      # Text pages
       draw_text_page <- function(title, text_lines) {
 
         grid::grid.newpage()
-        draw_header()
 
         body <- paste(
-          stringr::str_wrap(
-            paste(text_lines[!is.na(text_lines)], collapse = " "),
-            width = 85
-          ),
+          text_lines[!is.na(text_lines)],
           collapse = "\n"
         )
+
+        body <- stringr::str_wrap(body, width = 90)
 
         grid::pushViewport(
           grid::viewport(
             x = 0.5, y = 0.5,
-            width = 0.82, height = 0.88
+            width = 0.78,
+            height = 0.84
           )
         )
 
@@ -895,7 +861,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
           x = 0, y = 1,
           just = c("left", "top"),
           gp = grid::gpar(
-            fontsize = 14,
+            fontsize = 16,
             fontface = "bold",
             fontfamily = "serif"
           )
@@ -903,11 +869,11 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
         grid::grid.text(
           body,
-          x = 0, y = 0.94,
+          x = 0, y = 0.93,
           just = c("left", "top"),
           gp = grid::gpar(
             fontsize = 12,
-            lineheight = 1.8,
+            lineheight = 2,
             fontfamily = "serif"
           )
         )
@@ -915,17 +881,14 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         grid::popViewport()
       }
 
-      # =========================================================
-      # TABLE PAGE (CENTER FIX)
-      # =========================================================
+      # Table pages
       draw_table_page <- function(title, df) {
-
-        grid::grid.newpage()
-        draw_header()
 
         if (is.null(df) || nrow(df) == 0) {
           df <- data.frame(Message = "No data available")
         }
+
+        names(df)[names(df) == "plot_group"] <- "Group"
 
         zebra <- rep(c("grey95", "white"), length.out = nrow(df))
 
@@ -942,7 +905,11 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         gridExtra::grid.arrange(
           grid::textGrob(
             title,
-            gp = grid::gpar(fontsize = 13, fontface = "bold", fontfamily = "serif")
+            gp = grid::gpar(
+              fontsize = 16,
+              fontface = "bold",
+              fontfamily = "serif"
+            )
           ),
           tbl,
           ncol = 1,
@@ -950,13 +917,8 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         )
       }
 
-      # =========================================================
-      # PLOT PAGE (FIXED VIEWPORT AS REQUESTED)
-      # =========================================================
+      # Plot pages
       draw_plot_page <- function(plot_obj, title, caption_text) {
-
-        grid::grid.newpage()
-        draw_header()
 
         vp <- grid::viewport(
           x = 0.5, y = 0.5,
@@ -966,19 +928,28 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
         plot_grob <- if (inherits(plot_obj, "grob") || inherits(plot_obj, "gtable")) {
           plot_obj
-        } else ggplot2::ggplotGrob(plot_obj)
+        } else {
+          ggplot2::ggplotGrob(plot_obj)
+        }
 
-        caption <- paste0(next_fig(), ". ", stringr::str_wrap(caption_text, 110))
+        caption <- paste0(next_fig(), ". ", stringr::str_wrap(caption_text, 100))
 
         gridExtra::grid.arrange(
           grid::textGrob(
             title,
-            gp = grid::gpar(fontsize = 14, fontface = "bold", fontfamily = "serif")
+            gp = grid::gpar(
+              fontsize = 16,
+              fontface = "bold",
+              fontfamily = "serif"
+            )
           ),
           plot_grob,
           grid::textGrob(
             caption,
-            gp = grid::gpar(fontsize = 9, fontfamily = "serif")
+            gp = grid::gpar(
+              fontsize = 12,
+              fontfamily = "serif"
+            )
           ),
           ncol = 1,
           heights = c(0.08, 0.84, 0.08),
@@ -986,9 +957,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         )
       }
 
-      # =========================================================
-      # TABLES
-      # =========================================================
+      # Tables
       summary_table <- stat_df %>%
         dplyr::group_by(plot_group) %>%
         dplyr::summarise(
@@ -1010,78 +979,61 @@ server_results <- function(input, output, session, state, plates, normalized_dat
           Normalized_Value = value
         )
 
-      # =========================================================
-      # PDF START
-      # =========================================================
+      # --- PDF Start ---
       pdf(file, width = 8.5, height = 11, onefile = TRUE)
 
-      # =========================================================
-      # TITLE PAGE (UNCHANGED)
-      # =========================================================
+      # Title Page
       grid::grid.newpage()
 
       grid::grid.text(
         "Plate Analysis Report",
         x = 0.5, y = 0.6,
-        gp = grid::gpar(fontsize = 22, fontface = "bold", fontfamily = "serif")
+        gp = grid::gpar(
+          fontsize = 22,
+          fontface = "bold",
+          fontfamily = "serif"
+        )
       )
 
       grid::grid.text(
-        paste("Plate ID:", input$active_plate,
-              "\nGenerated:", format(Sys.time(), "%Y-%m-%d %H:%M")),
+        paste(
+          "Plate ID:", input$active_plate,
+          "\nGenerated:", format(Sys.time(), "%Y-%m-%d %H:%M")
+        ),
         x = 0.5, y = 0.45,
-        gp = grid::gpar(fontsize = 12, fontfamily = "serif")
+        gp = grid::gpar(
+          fontsize = 12,
+          fontfamily = "serif"
+        )
       )
 
-      # =========================================================
-      # TABLE OF CONTENTS
-      # =========================================================
-      draw_text_page("Table of Contents",
-                     c(
-                       "1. Methods",
-                       "2. Plate Layout",
-                       "3. Normalized Dataset",
-                       "4. Summary Statistics",
-                       "5. Visualizations",
-                       "6. Statistical Tests",
-                       "7. Standard Curve & Values",
-                       "8. Discussion",
-                       "9. References"
-                     ))
-
-      # =========================================================
-      # METHODS
-      # =========================================================
+      # Methods
       draw_text_page(
         "Methods",
         c(
           paste0(
             "Data from plate ", input$active_plate,
-            " were processed using the predefined normalization workflow. "
+            " were processed using the predefined normalization workflow."
           ),
           paste0(
-            "The mean blank signal was ",
-            round(blank_mean, 4),
-            ", and the mean control signal was ",
-            round(control_mean, 4), ". "
+            "The mean blank signal was ", round(blank_mean, 4),
+            " and the mean control signal was ", round(control_mean, 4), "."
           ),
-          "Normalized values were calculated as (Raw Value - Blank Mean) / (Control Mean - Blank Mean), allowing all groups to be interpreted on a common relative scale. ",
+          "Normalized values were calculated as (Raw Value - Blank Mean) / (Control Mean - Blank Mean), allowing all groups to be interpreted on a common relative scale.",
           if (has_boxplot)
-            "Distributional characteristics were evaluated using boxplots to visualize medians, spread, and potential extreme values. ",
+            "Distributional characteristics were evaluated using boxplots to visualize medians, spread, and potential extreme values.",
           if (has_bar)
-            "Group means and associated standard errors were visualized using bar charts with inferential significance annotations. ",
+            "Group means and associated standard errors were visualized using bar charts with inferential significance annotations.",
           if (has_ttest)
-            "Welch independent-samples t-tests were used for control-versus-treatment comparisons because they are robust to unequal variance. Benjamini-Hochberg correction was applied to pairwise comparisons where relevant. ",
+            "Welch independent-samples t-tests were used for control-versus-treatment comparisons because they are robust to unequal variance.",
           if (has_anova)
-            "When more than two groups were present, one-way ANOVA was used to test for omnibus differences among means, followed by Tukey-adjusted post hoc comparisons. ",
+            "One-way ANOVA was used to test for omnibus differences among means, followed by Tukey-adjusted post hoc comparisons.",
           if (has_outliers)
             "Potential outliers were screened using the 1.5 × IQR rule within each group."
         )
       )
 
-      # =========================================================
-      # PLATE LAYOUT
-      # =========================================================
+      # Plate Layout
       if (!is.null(plots[["Plate Layout"]])) {
         draw_plot_page(
           plots[["Plate Layout"]],
@@ -1090,19 +1042,13 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         )
       }
 
-      # =========================================================
-      # NORMALIZED DATA
-      # =========================================================
-      draw_table_page("Normalized Dataset (Subset)", head(normalized_table, 25))
+      # Normalized Data
+      draw_table_page("Normalized Data", head(normalized_table, 25))
 
-      # =========================================================
-      # SUMMARY
-      # =========================================================
+      # Summary Statistics
       draw_table_page("Summary Statistics", summary_table)
 
-      # =========================================================
-      # VISUALIZATIONS
-      # =========================================================
+      # --- Visualizations ---
       if (has_boxplot && !is.null(plots[["Boxplot"]])) {
         draw_plot_page(
           plots[["Boxplot"]],
@@ -1119,9 +1065,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         )
       }
 
-      # =========================================================
-      # TESTS (UNCHANGED LOGIC, FORMATTED OUTPUTS)
-      # =========================================================
+      # Test outputs
       if (has_ttest && !is.null(res$ttest)) {
 
         ctrl_df <- as.data.frame(res$ttest$p.value)
@@ -1179,9 +1123,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         draw_table_page("Outlier Detection", out_df)
       }
 
-      # =========================================================
-      # STANDARD CURVE SECTION
-      # =========================================================
+      # Standard Curves (if present)
       if (has_sc && !is.null(plots[["Standard Curve"]])) {
 
         draw_plot_page(
@@ -1191,32 +1133,30 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         )
       }
 
-      # =========================================================
-      # DISCUSSION
-      # =========================================================
+      # Discussion
       draw_text_page(
         "Discussion",
         c(
-          "This report integrates descriptive statistics, visualization, and inferential testing into a unified interpretation of the experimental plate. ",
+          "This report integrates descriptive statistics, visualization, and inferential testing into a unified interpretation of the experimental plate.",
           if (has_ttest)
-            "Control-versus-treatment comparisons provide direct evidence regarding whether observed treatment responses differ beyond expected sampling variation. ",
+            "Control-versus-treatment comparisons provide direct evidence regarding whether observed treatment responses differ beyond expected sampling variation.",
           if (has_anova)
-            "The multigroup framework evaluates whether any condition differs overall, while post hoc testing identifies the specific pairs responsible for the omnibus effect. ",
+            "The multigroup framework evaluates whether any condition differs overall, while post hoc testing identifies the specific pairs responsible for the omnibus effect.",
           if (has_outliers)
-            "Outlier screening should be interpreted in experimental context, as biologically meaningful responses can occasionally appear statistically extreme. ",
+            "Outlier screening should be interpreted in experimental context, as biologically meaningful responses can occasionally appear statistically extreme.",
           "Because all analyses were generated from the same normalized dataset, consistency is maintained across tables, figures, and conclusions. Final interpretation should consider sample size, assay variability, and biological relevance in addition to p-values alone."
         )
       )
 
-      # =========================================================
-      # REFERENCES
-      # =========================================================
-      draw_text_page("References",
-                     c(
-                       "R Core Team (2025). R: Statistical Computing Environment.",
-                       "Posit Team (2025). Shiny: Web Application Framework for R.",
-                       "Schrameck, A. (2026). Plate analysis pipeline development."
-                     ))
+      # References
+      draw_text_page(
+        "References",
+        c(
+          "R Core Team. (2025). R: Statistical computing environment.",
+          "Posit Team. (2025). Shiny: Web application framework for R.",
+          "Schrameck, A. (2026). Plate analysis pipeline development."
+        )
+      )
 
       dev.off()
     }
