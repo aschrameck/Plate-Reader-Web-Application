@@ -121,20 +121,40 @@ server_upload <- function(input, output, session, state, plates) {
           if (nrow(values) == 0 || ncol(values) == 0) next
 
           # -----------------------------
-          # Handle headers
+          # Handle headers (STRICT CROPPING)
           # -----------------------------
           if (isTRUE(input$has_header)) {
 
-            # Remove first row / first col entirely
-            if (nrow(values) > 1) values <- values[-1, , drop = FALSE]
-            if (ncol(values) > 1) values <- values[, -1, drop = FALSE]
+            # Detect numeric column headers (e.g., 1–12)
+            header_row <- values[1, , drop = TRUE]
 
-            if (nrow(values) == 0 || ncol(values) == 0) next
+            # Detect row headers (e.g., A–H)
+            header_col <- values[, 1, drop = TRUE]
 
+            # Identify where real column numbers start (ignore NA/text)
+            col_start <- which(!is.na(suppressWarnings(as.numeric(header_row))))[1]
+            col_end   <- tail(which(!is.na(suppressWarnings(as.numeric(header_row)))), 1)
+
+            # Identify where real row letters start (ignore NA)
+            row_start <- which(!is.na(header_col) & header_col != "")[1]
+            row_end   <- tail(which(!is.na(header_col) & header_col != ""), 1)
+
+            # Safety fallback if detection fails
+            if (is.na(col_start) || is.na(col_end) || is.na(row_start) || is.na(row_end)) next
+
+            # Crop EXACT plate region (removes headers completely)
+            values <- values[
+              row_start:row_end,
+              col_start:col_end,
+              drop = FALSE
+            ]
+
+            # Now assign clean dim names
             rownames(values) <- LETTERS[seq_len(nrow(values))]
             colnames(values) <- seq_len(ncol(values))
 
           } else {
+
             rownames(values) <- LETTERS[seq_len(nrow(values))]
             colnames(values) <- seq_len(ncol(values))
           }

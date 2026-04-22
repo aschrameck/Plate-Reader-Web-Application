@@ -46,13 +46,10 @@ server_inspect <- function(input, output, session, state, plates) {
       need(input$active_plate %in% names(plates()), "Invalid plate selection")
     )
 
-    plate <- plates()[[input$active_plate]] %>%
-      filter(!is.na(value))
+    plate <- plates()[[input$active_plate]]
 
-    # Expand wells into groups
     # --- Expand wells into groups ---
     expanded_plate <- plate %>%
-      filter(!is.na(value)) %>%
       mutate(
         group = purrr::pmap(
           list(is_control, is_blank, is_label, is_standard,
@@ -85,8 +82,10 @@ server_inspect <- function(input, output, session, state, plates) {
       tidyr::unnest(group)
 
     # Factor rows
+    row_levels <- sort(unique(plate$row))  # from FULL plate, not filtered
+
     expanded_plate <- expanded_plate %>%
-      mutate(row = factor(row, levels = rev(sort(unique(row)))))
+      mutate(row = factor(row, levels = rev(row_levels)))
 
     # --- Compute sub-tiles for multi-group wells ---
     # Each well can belong to multiple groups → split it visually into slices
@@ -157,6 +156,27 @@ server_inspect <- function(input, output, session, state, plates) {
     # Legend filtering
     non_std_labels <- setdiff(names(palette), std_df$label)
 
+    # --- Plate dimensions ---
+    max_row <- length(unique(plate$row))
+    max_col <- length(unique(plate$col))
+
+    row_levels <- sort(unique(plate$row))
+    col_levels <- sort(unique(plate$col))
+
+    # Column numbers (top row)
+    col_header <- data.frame(
+      row = max_row + 0.8,
+      col = col_levels,
+      label = col_levels
+    )
+
+    # Row letters (left column)
+    row_header <- data.frame(
+      row = row_levels,
+      col = 0,
+      label = row_levels
+    )
+
     # --- Plotting ---
     plot <- ggplot(expanded_plate) +
       # Base layer: all wells
@@ -164,6 +184,24 @@ server_inspect <- function(input, output, session, state, plates) {
         aes(xmin = xmin, xmax = xmax,
             ymin = ymin, ymax = ymax,
             fill = group)
+      ) +
+
+      # Column headers
+      geom_text(
+        data = col_header,
+        aes(x = col, y = row, label = label),
+        inherit.aes = FALSE,
+        size = 4,
+        fontface = "bold"
+      ) +
+
+      # Row headers
+      geom_text(
+        data = row_header,
+        aes(x = col, y = row, label = label),
+        inherit.aes = FALSE,
+        size = 4,
+        fontface = "bold"
       ) +
 
       # Blanks
@@ -199,7 +237,8 @@ server_inspect <- function(input, output, session, state, plates) {
 
       # Values
       geom_text(
-        aes(x = col, y = row, label = value),
+        aes(x = col, y = row,
+            label = ifelse(is.na(value), "", value)),
         size = 3
       ) +
 
@@ -210,6 +249,13 @@ server_inspect <- function(input, output, session, state, plates) {
         labels = identity,
         na.value = "grey"
       ) +
+
+      scale_y_discrete(
+        expand = expansion(add = c(0.5, max_row * 0.15))
+      ) +  # more space on top
+      scale_x_continuous(expand = expansion(add = c(1, 1))) +  # keep symmetric padding
+
+      coord_cartesian(clip = "off") +  # prevents cropping of headers
 
       # Formatting
       theme_void() +
