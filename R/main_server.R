@@ -173,6 +173,130 @@ app_server <- function(input, output, session) {
   server_analysis(input, output, session, state, plates, normalized_data)
   server_results(input, output, session, state, plates, normalized_data)
 
+  # --- User Guide Search ---
+  observe({
+
+    query <- input$guide_search
+
+    # Reset
+    if (is.null(query) || trimws(query) == "") {
+      shinyjs::runjs("
+      window.guideMatches = [];
+      window.guideIndex = -1;
+
+      $('.guide-section').each(function() {
+        $(this).html($(this).data('original-html'));
+      });
+    ")
+      return()
+    }
+
+    query <- tolower(query)
+
+    shinyjs::runjs(sprintf("
+    var query = '%s';
+
+    window.guideMatches = [];
+    window.guideIndex = -1;
+
+    $('.guide-section').each(function() {
+
+      var el = $(this);
+
+      if (!el.data('original-html')) {
+        el.data('original-html', el.html());
+      }
+
+      var html = el.data('original-html');
+
+      var safeQuery = query.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+      var regex = new RegExp('(' + safeQuery + ')', 'gi');
+
+      var newHtml = html.replace(regex, '<span class=\"guide-mark\">$1</span>');
+
+      el.html(newHtml);
+    });
+
+    // Collect matches
+    window.guideMatches = $('.guide-mark');
+
+    if (window.guideMatches.length > 0) {
+
+      window.guideIndex = 0;
+
+      $('.guide-mark').removeClass('guide-mark-active');
+
+      var el = $(window.guideMatches[0]);
+      el.addClass('guide-mark-active');
+
+      // FIXED SCROLL (wait for DOM)
+      setTimeout(function() {
+        var container = $('.modal-body');
+
+        if (el.length) {
+          container.animate({
+            scrollTop: el.position().top + container.scrollTop() - container.height()/2
+          }, 300);
+        }
+      }, 50);
+    }
+
+  ", query))
+  })
+
+  observe({
+
+    shinyjs::runjs("
+    if (!window.guideKeyListenerAdded) {
+
+      window.guideKeyListenerAdded = true;
+
+      $(document).on('keydown', function(e) {
+
+        if (!window.guideMatches || window.guideMatches.length === 0) return;
+
+        if (e.key === 'Enter') {
+
+          e.preventDefault();
+
+          if (e.shiftKey) {
+            window.guideIndex--;
+          } else {
+            window.guideIndex++;
+          }
+
+          if (window.guideIndex >= window.guideMatches.length) {
+            window.guideIndex = 0;
+          }
+
+          if (window.guideIndex < 0) {
+            window.guideIndex = window.guideMatches.length - 1;
+          }
+
+          $('.guide-mark').removeClass('guide-mark-active');
+
+          var el = $(window.guideMatches[window.guideIndex]);
+          el.addClass('guide-mark-active');
+
+          // 🔥 FIXED SCROLL (always to active)
+          setTimeout(function() {
+            var container = $('.modal-body');
+
+            if (el.length) {
+              container.animate({
+                scrollTop: el.position().top + container.scrollTop() - container.height()/2
+              }, 200);
+            }
+          }, 50);
+
+          // subtle visual feedback
+          el.fadeOut(70).fadeIn(70);
+        }
+      });
+    }
+  ")
+  })
+
   # ---- USER GUIDE ----
   observeEvent(input$user_guide_icon, {
 
@@ -193,81 +317,206 @@ app_server <- function(input, output, session) {
                         tags$li(tags$a("Overview", href="#guide_overview")),
                         tags$li(tags$a("Workflow", href="#guide_workflow")),
                         tags$li(tags$a("Upload", href="#guide_upload")),
-                        tags$li(tags$a("Labeling", href="#guide_label")),
+                        tags$li(tags$a("Inspect", href="#guide_label")),
                         tags$li(tags$a("Normalization", href="#guide_norm")),
                         tags$li(tags$a("Analysis", href="#guide_analysis")),
                         tags$li(tags$a("Results", href="#guide_results")),
-                        tags$li(tags$a("Examples", href="#guide_examples")),
-                        tags$li(tags$a("FAQ", href="#guide_faq"))
+                        tags$li(tags$a("FAQs", href="#guide_faq"))
                 )
             ),
 
             # Content
             div(class="guide-content",
 
+                # ---------------- Overview ----------------
                 div(id="guide_overview", class="guide-section",
                     tags$h2("Overview"),
-                    tags$p("This application guides you through analyzing plate reader data from raw files to statistical results and publication-ready outputs.")
+                    tags$p("This application provides an end-to-end workflow for analyzing plate reader data, from raw file upload to statistical testing and publication-ready outputs."),
+
+                    tags$h4("What you can do:"),
+                    tags$ul(
+                      tags$li("Upload and parse multiple plate files"),
+                      tags$li("Interactively inspect and label wells"),
+                      tags$li("Normalize data using blanks, controls, and standards"),
+                      tags$li("Run statistical tests and generate visualizations"),
+                      tags$li("Export results in multiple formats")
+                    ),
+
+                    tags$h4("How-To Video"),
+                    tags$div(class="guide-video", "[Embed tutorial video here]")
                 ),
 
+                tags$hr(),
+
+                # ---------------- Workflow ----------------
                 div(id="guide_workflow", class="guide-section",
                     tags$h2("Workflow"),
                     tags$ol(
-                      tags$li("Upload raw plate data"),
-                      tags$li("Inspect and label wells"),
-                      tags$li("Normalize values"),
-                      tags$li("Run statistical analysis"),
-                      tags$li("Export results")
+                      tags$li(tags$b("Upload:"), " Import raw plate data (CSV, TXT, Excel)."),
+                      tags$li(tags$b("Inspect & Label:"), " Assign groups, controls, blanks, and standards."),
+                      tags$li(tags$b("Normalization:"), " Apply background correction and scaling."),
+                      tags$li(tags$b("Analysis & Visualization:"), " Select statistical tests and plots."),
+                      tags$li(tags$b("Results & Export:"), " Download figures, tables, or full reports.")
                     )
                 ),
 
+                tags$hr(),
+
+                # ---------------- Upload ----------------
                 div(id="guide_upload", class="guide-section",
                     tags$h2("Upload Data"),
-                    tags$p("Upload CSV, TXT, or Excel files. Multiple plates are supported."),
-                    tags$div(class="guide-img","[Add screenshot here]")
+
+                    tags$p("Upload one or more CSV, TXT, or Excel files. Files containing multiple plates are automatically seperated and labelled with a number and the original filename."),
+
+                    tags$h4("Example Input: With Headers"),
+                    tags$div(class="guide-img", "[Screenshot: raw file with headers]"),
+                    tags$div(class="guide-img", "[Screenshot: resulting inspect screen]"),
+
+                    tags$h4("Example Input: Without Headers"),
+                    tags$div(class="guide-img", "[Screenshot: raw file without headers]"),
+                    tags$div(class="guide-img", "[Screenshot: resulting inspect screen]"),
+
+                    tags$p(tags$b("Tip:"), " If headers are present, ensure the 'File contains headers' checkbox is selected. Incorrect selection can cause spacing or alignment issues.")
                 ),
 
+                tags$hr(),
+
+                # ---------------- Inspect ----------------
                 div(id="guide_label", class="guide-section",
-                    tags$h2("Label Wells"),
-                    tags$p("Use brushing to select wells and assign roles."),
+                    tags$h2("Inspect Wells"),
+
+                    tags$p("Use the brushing tool to select wells and assign them to experimental groups."),
+
+                    tags$h4("Label Types"),
                     tags$ul(
-                      tags$li("Label = experimental condition"),
-                      tags$li("Control = normalization baseline"),
-                      tags$li("Blank = background signal"),
-                      tags$li("Standard = known concentration")
+                      tags$li(tags$b("Label:"), " Experimental condition (what you want to compare)"),
+                      tags$li(tags$b("Control:"), " Baseline reference group"),
+                      tags$li(tags$b("Blank:"), " Background signal for subtraction"),
+                      tags$li(tags$b("Standard:"), " Known concentration for calibration")
+                    ),
+
+                    tags$div(class="guide-img", "[Screenshot: brushing wells]"),
+                    tags$div(class="guide-img", "[Screenshot: assigning label]"),
+
+                    tags$p(tags$b("Tip:"), " The groups you assign determine what will be compared in analysis."),
+
+                    tags$p(tags$b("Controls across multiple groups:"),
+                           " If a control applies to multiple experimental groups, it must be assigned separately to each group."
+                    ),
+
+                    tags$h4("Standards"),
+                    tags$p("To assign numeric concentrations to standard wells: "),
+                    tags$ol(
+                      tags$li("Select the 'Standard' checkbox"),
+                      tags$li("Enter the concentration as a label"),
+                      tags$li("Enter the units (if available)"),
+                      tags$li("Drag and select desired well"),
+                      tags$li("Click 'Apply Label'")
+                    ),
+                    tags$div(class="guide-img", "[Screenshot: standard labeling example]")
+                ),
+
+                tags$hr(),
+
+                # ---------------- Normalization ----------------
+                div(id="guide_norm", class="guide-section",
+                    tags$h2("Normalization"),
+
+                    tags$p("Normalization adjusts raw values to remove background signal and optionally scale relative to controls."),
+
+                    tags$h4("Normalization Formula"),
+                    tags$pre("(Value - Mean Blank) / Mean Control"),
+
+                    tags$p("Steps:"),
+                    tags$ul(
+                      tags$li("Subtract blank signal from all wells"),
+                      tags$li("Divide by control mean"),
+                      tags$li("Process is applied per group")
+                    ),
+
+                    tags$h4("Standard Curve Prediction"),
+                    tags$p("If standards are provided, a calibration curve is generated and used to estimate concentrations for unknown samples."),
+
+                    tags$div(class="guide-img", "[Screenshot: standard curve prediction]"),
+
+                    tags$h4("Download Options"),
+                    tags$ul(
+                      tags$li(tags$b("Detailed CSV:"), " Fully processed dataset with all metadata"),
+                      tags$li(tags$b("Prism-Compatible:"), " Formatted for GraphPad Prism import"),
+                      tags$li(tags$b("Standards File:"), " Standard curve data and fitted values")
                     )
                 ),
 
-                div(id="guide_norm", class="guide-section",
-                    tags$h2("Normalization"),
-                    tags$p("Normalization is performed per group using blank subtraction and optional control scaling.")
-                ),
+                tags$hr(),
 
+                # ---------------- Analysis ----------------
                 div(id="guide_analysis", class="guide-section",
-                    tags$h2("Analysis"),
-                    tags$p("Perform ANOVA, Tukey post-hoc tests, and visualize distributions.")
+                    tags$h2("Analysis & Visualization"),
+
+                    tags$h4("Statistical Tests"),
+                    tags$ul(
+                      tags$li(tags$b("T-test:"), " Includes pairwise comparisons and control vs treatment"),
+                      tags$li(tags$b("ANOVA:"), " Multi-group comparison with Tukey post-hoc significance"),
+                      tags$li(tags$b("Outlier Detection:"), " Identifies extreme values using 1.5 x IQR")
+                    ),
+
+                    tags$h4("Visualizations"),
+                    tags$ul(
+                      tags$li("Boxplot"),
+                      tags$li("Bar chart"),
+                      tags$li("Standard curve")
+                    ),
+
+                    tags$div(class="guide-img", "[Screenshot: bar chart]"),
+                    tags$div(class="guide-img", "[Screenshot: boxplot]"),
+                    tags$div(class="guide-img", "[Screenshot: standard curve]"),
+
+                    tags$h4("Warnings vs Errors"),
+                    tags$p(tags$b("Warnings:"),
+                           " Provide information about potential issues (e.g., variance differences). Results can still be interpreted but with caution."
+                    ),
+
+                    tags$p(tags$b("Errors:"),
+                           " Indicate that assumptions of a statistical test are violated (e.g., insufficient groups, missing data). These must be fixed before proceeding."
+                    ),
+
+                    tags$p("If errors occur, consider adjusting labels or deselecting incompatible tests.")
                 ),
 
+                tags$hr(),
+
+                # ---------------- Results ----------------
                 div(id="guide_results", class="guide-section",
-                    tags$h2("Results"),
-                    tags$p("Download plots, statistical outputs, and teaching reports.")
+                    tags$h2("Results & Export"),
+
+                    tags$p("Download results in multiple formats depending on your needs:"),
+
+                    tags$ul(
+                      tags$li(tags$b("Visualizations:"), " Plots only"),
+                      tags$li(tags$b("Statistical Analysis:"), " Tables and test results"),
+                      tags$li(tags$b("Full Report:"), " Combined methods, figures, and tables")
+                    ),
                 ),
 
-                div(id="guide_examples", class="guide-section",
-                    tags$h2("Examples"),
-                    tags$h4("Example 1: Drug Response"),
-                    tags$p("Compare treatment vs control groups using ANOVA."),
-                    tags$h4("Example 2: Standard Curve"),
-                    tags$p("Use standards to generate a calibration curve.")
-                ),
+                tags$hr(),
 
+                # ---------------- FAQ ----------------
                 div(id="guide_faq", class="guide-section",
                     tags$h2("Frequently Asked Questions"),
+
+                    tags$h4("Why is the spacing weird or headers appear incorrectly?"),
+                    tags$p("This usually occurs when the 'Has Header' option was selected incorrectly or non-numeric values were included in the plate."),
+
+                    tags$h4("How do I switch between plates?"),
+                    tags$p("Multiple plates are loaded as 'Plate_X_filename'. Use the dropdown selector on each page to switch between them."),
+
                     tags$h4("Why is my plot empty?"),
-                    tags$p("Ensure groups are labeled and selected in analysis."),
+                    tags$p("Ensure groups are labeled and selected in the analysis step."),
+
                     tags$h4("Why is normalization incorrect?"),
                     tags$p("Check that blanks and controls are properly assigned."),
-                    tags$h4("Why no standard curve?"),
+
+                    tags$h4("Why is there no standard curve?"),
                     tags$p("At least two standard values are required.")
                 )
 

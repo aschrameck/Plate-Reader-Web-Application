@@ -166,6 +166,19 @@ main_ui <- function() {
         margin-top: 15px;
       }
 
+      .guide-mark {
+        background-color: #0d6efd;   /* Bootstrap primary blue */
+        color: white !important;
+        padding: 1px 3px;
+        border-radius: 3px;
+      }
+
+      .guide-mark-active {
+        background-color: #084298 !important; /* darker blue for active */
+        color: white !important;
+        outline: 2px solid rgba(13,110,253,0.5);
+      }
+
       ")),
 
         tags$script(HTML("

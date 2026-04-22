@@ -63,7 +63,7 @@ analysis_ui <- function() {
                   "Visualizations",
                   choices = c(
                     "Boxplot",
-                    "Bar + Jitter Chart",
+                    "Bar Chart",
                     "Standard Curve"
                   )
                 )
