@@ -369,12 +369,12 @@ app_server <- function(input, output, session) {
                     tags$p("Upload one or more CSV, TXT, or Excel files. Files containing multiple plates are automatically seperated and labelled with a number and the original filename."),
 
                     tags$h4("Example Input: With Headers"),
-                    tags$div(class="guide-img", "[Screenshot: raw file with headers]"),
-                    tags$div(class="guide-img", "[Screenshot: resulting inspect screen]"),
+                    tags$div(class="guide-img", tags$img(src="guide/Raw-Data-With-Headers.png")),
+                    tags$div(class="guide-img", tags$img(src="guide/Inspect-With-Headers.png")),
 
                     tags$h4("Example Input: Without Headers"),
-                    tags$div(class="guide-img", "[Screenshot: raw file without headers]"),
-                    tags$div(class="guide-img", "[Screenshot: resulting inspect screen]"),
+                    tags$div(class="guide-img", tags$img(src="guide/Raw-Data-Without-Headers.png")),
+                    tags$div(class="guide-img", tags$img(src="guide/Inspect-Without-Headers.png")),
 
                     tags$p(tags$b("Tip:"), " If headers are present, ensure the 'File contains headers' checkbox is selected. Incorrect selection can cause spacing or alignment issues.")
                 ),
@@ -395,14 +395,17 @@ app_server <- function(input, output, session) {
                       tags$li(tags$b("Standard:"), " Known concentration for calibration")
                     ),
 
-                    tags$div(class="guide-img", "[Screenshot: brushing wells]"),
-                    tags$div(class="guide-img", "[Screenshot: assigning label]"),
+                    tags$h4("Applying Labels:"),
+                    tags$div(class="guide-img", tags$img(src="guide/Brushing-Wells.png")),
+                    tags$div(class="guide-img", tags$img(src="guide/Label-Wells.png")),
 
                     tags$p(tags$b("Tip:"), " The groups you assign determine what will be compared in analysis."),
 
                     tags$p(tags$b("Controls across multiple groups:"),
                            " If a control applies to multiple experimental groups, it must be assigned separately to each group."
                     ),
+
+                    tags$div(class="guide-img", tags$img(src="guide/Multigroup-Controls.png")),
 
                     tags$h4("Standards"),
                     tags$p("To assign numeric concentrations to standard wells: "),
@@ -413,7 +416,7 @@ app_server <- function(input, output, session) {
                       tags$li("Drag and select desired well"),
                       tags$li("Click 'Apply Label'")
                     ),
-                    tags$div(class="guide-img", "[Screenshot: standard labeling example]")
+                    tags$div(class="guide-img", tags$img(src="guide/Standard-Wells.png"))
                 ),
 
                 tags$hr(),
@@ -437,14 +440,16 @@ app_server <- function(input, output, session) {
                     tags$h4("Standard Curve Prediction"),
                     tags$p("If standards are provided, a calibration curve is generated and used to estimate concentrations for unknown samples."),
 
-                    tags$div(class="guide-img", "[Screenshot: standard curve prediction]"),
+                    tags$h2("Download Options"),
 
-                    tags$h4("Download Options"),
-                    tags$ul(
-                      tags$li(tags$b("Detailed CSV:"), " Fully processed dataset with all metadata"),
-                      tags$li(tags$b("Prism-Compatible:"), " Formatted for GraphPad Prism import"),
-                      tags$li(tags$b("Standards File:"), " Standard curve data and fitted values")
-                    )
+                    tags$h4(tags$b("Detailed CSV:"), " Fully processed dataset with all metadata"),
+                    tags$div(class="guide-img", tags$img(src="guide/Processed-Data.png")),
+
+                    tags$h4(tags$b("Prism-Compatible:"), " Formatted for GraphPad Prism import"),
+                    tags$div(class="guide-img", tags$img(src="guide/Prism-Data.png")),
+
+                    tags$h4(tags$b("Standards File:"), " Standard curve data and fitted values"),
+                    tags$div(class="guide-img", tags$img(src="guide/Standards-Data.png")),
                 ),
 
                 tags$hr(),
@@ -467,10 +472,6 @@ app_server <- function(input, output, session) {
                       tags$li("Standard curve")
                     ),
 
-                    tags$div(class="guide-img", "[Screenshot: bar chart]"),
-                    tags$div(class="guide-img", "[Screenshot: boxplot]"),
-                    tags$div(class="guide-img", "[Screenshot: standard curve]"),
-
                     tags$h4("Warnings vs Errors"),
                     tags$p(tags$b("Warnings:"),
                            " Provide information about potential issues (e.g., variance differences). Results can still be interpreted but with caution."
@@ -480,7 +481,9 @@ app_server <- function(input, output, session) {
                            " Indicate that assumptions of a statistical test are violated (e.g., insufficient groups, missing data). These must be fixed before proceeding."
                     ),
 
-                    tags$p("If errors occur, consider adjusting labels or deselecting incompatible tests.")
+                    tags$p("If errors occur, consider adjusting labels or deselecting incompatible tests."),
+
+                    tags$div(class="guide-img", tags$img(src="guide/Warnings-Errors.png"))
                 ),
 
                 tags$hr(),
@@ -497,6 +500,15 @@ app_server <- function(input, output, session) {
                       tags$li(tags$b("Full Report:"), " Combined methods, figures, and tables")
                     ),
                 ),
+
+                tags$h4(tags$b("Example:"), " Boxplot"),
+                tags$div(class="guide-img", tags$img(src="guide/Box-Plot.png")),
+
+                tags$h4(tags$b("Example:"), " Bar Chart"),
+                tags$div(class="guide-img", tags$img(src="guide/Bar-Chart.png")),
+
+                tags$h4(tags$b("Example:"), " Standard Curve"),
+                tags$div(class="guide-img", tags$img(src="guide/Standard-Curve.png")),
 
                 tags$hr(),
 

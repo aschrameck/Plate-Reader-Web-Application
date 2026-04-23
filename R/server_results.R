@@ -349,8 +349,8 @@ server_results <- function(input, output, session, state, plates, normalized_dat
       plots[["Boxplot"]] <- make_boxplot(df)
     }
 
-    if ("Bar + Jitter Chart" %in% state$viz_types) {
-      plots[["Bar + Jitter"]] <- make_bar_jitter(df)
+    if ("Bar Chart" %in% state$viz_types) {
+      plots[["Bar Chart"]] <- make_bar_jitter(df)
     }
 
     if ("Standard Curve" %in% state$viz_types) {
@@ -808,7 +808,7 @@ server_results <- function(input, output, session, state, plates, normalized_dat
 
       # Flags
       has_boxplot  <- "Boxplot" %in% state$viz_types
-      has_bar      <- "Bar + Jitter Chart" %in% state$viz_types
+      has_bar      <- "Bar Chart" %in% state$viz_types
       has_sc       <- "Standard Curve" %in% state$viz_types
 
       has_ttest    <- "T-test (Control vs Treatment)" %in% state$analysis_types
@@ -1057,9 +1057,9 @@ server_results <- function(input, output, session, state, plates, normalized_dat
         )
       }
 
-      if (has_bar && !is.null(plots[["Bar + Jitter"]])) {
+      if (has_bar && !is.null(plots[["Bar Chart"]])) {
         draw_plot_page(
-          plots[["Bar + Jitter"]],
+          plots[["Bar Chart"]],
           "Bar Chart with Error Bars",
           "Bars represent group means. Error bars indicate standard error of the mean. Brackets and asterisks denote statistical comparisons versus the control group (* p < .05, ** p < .01, *** p < .001)."
         )

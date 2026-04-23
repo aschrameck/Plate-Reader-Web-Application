@@ -299,7 +299,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
       selected = if (isTRUE(input$analysis_select_all)) {
         c(
           "Boxplot",
-          "Bar + Jitter Chart",
+          "Bar Chart",
           "Standard Curve"
         )
       } else character(0)

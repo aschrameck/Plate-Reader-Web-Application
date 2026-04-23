@@ -155,15 +155,11 @@ main_ui <- function() {
         cursor: pointer;
       }
 
-      /* Screenshot placeholders */
+      /* Screenshot formatting */
       .guide-img {
-        border: 2px dashed #ccc;
+        width: 100%;
         border-radius: 8px;
-        padding: 30px;
-        text-align: center;
-        color: #888;
-        font-style: italic;
-        margin-top: 15px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
       }
 
       .guide-mark {
