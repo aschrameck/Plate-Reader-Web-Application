@@ -13,13 +13,107 @@ server_upload(input, output, session, state, plates)
 
 \item{session}{Shiny session object}
 
-\item{state}{ReactiveValues object storing application state}
+\item{state}{ReactiveValues object storing global application state}
 
-\item{plates}{Reactive object for storing loaded plate data}
+\item{plates}{ReactiveVal storing parsed plate data (named list)}
 }
 \value{
-NULL; updates \code{state} and \code{plates} reactively
+NULL. This function operates via side effects:
+\itemize{
+\item Updates \code{plates()} with parsed data
+\item Updates UI state via \code{shinyjs} and notifications
+}
 }
 \description{
-Handles file input, parsing, and initialization of plate data for the app.
+Manages file ingestion, validation, parsing, and initialization of plate data
+for the Plate Reader Analysis workflow. This module is responsible for
+transforming raw uploaded files into structured, analysis-ready plate objects.
 }
+\details{
+This server component performs five primary responsibilities:
+
+\strong{1. Upload Feedback & UX}
+\itemize{
+\item Displays a loading spinner immediately when files are selected
+\item Replaces spinner with a success indicator upon completion
+\item Provides visual feedback using \code{shinyjs}
+}
+
+\strong{2. File Validation}
+\itemize{
+\item Restricts uploads to supported formats: \code{.csv}, \code{.txt}, \code{.xlsx}
+\item Ensures files are non-empty
+\item Dynamically enables/disables progression based on validity
+}
+
+\strong{3. File Reading & Error Handling}
+\itemize{
+\item Uses format-specific readers:
+\itemize{
+\item CSV → \code{read.csv()}
+\item TXT → \code{read.table()}
+\item XLSX → \code{readxl::read_xlsx()}
+}
+\item Wraps reads in \code{tryCatch()} to prevent app crashes
+\item Displays user-facing error notifications on failure
+}
+
+\strong{4. Plate Detection & Extraction}
+\itemize{
+\item Automatically detects one or more plates per file by:
+\itemize{
+\item Identifying contiguous non-empty row blocks
+\item Identifying contiguous non-empty column blocks
+\item Extracting all valid row/column block combinations
+}
+\item Supports multiple plates embedded in a single file
+\item Preserves internal missing values (NAs) within detected plate regions
+}
+
+\strong{Header Handling}
+\itemize{
+\item Optional (\code{input$has_header})
+\item Detects and removes:
+\itemize{
+\item Column headers (numeric indices, e.g., 1–12)
+\item Row headers (alphabetical labels, e.g., A–H)
+}
+\item Uses strict cropping to isolate only the data matrix
+\item Falls back safely if header detection fails
+}
+
+\strong{5. Data Transformation & Initialization}
+\itemize{
+\item Converts all values to numeric (non-numeric → NA)
+\item Reshapes wide plate format → long format:
+\itemize{
+\item Columns: \code{row}, \code{col}, \code{value}
+}
+\item Assigns standardized row/column identifiers
+}
+
+\strong{Metadata Initialization}
+Each well is initialized with default annotation fields:
+\itemize{
+\item \code{is_control}, \code{is_blank}, \code{is_label}, \code{is_standard}
+\item \code{labels}, \code{control_groups}, \code{blanks} (list columns)
+\item \code{standards}, \code{standard_units}
+}
+
+\strong{Plate Naming}
+\itemize{
+\item Plates are uniquely named using:
+\verb{Plate_<index>_<filename>}
+}
+
+\strong{Final Output}
+\itemize{
+\item All parsed plates are stored in a named list
+\item The reactive \code{plates()} object is updated
+\item Validation ensures at least one plate is successfully loaded
+}
+}
+\seealso{
+server_inspect, main_server
+}
+\concept{Upload Module}
