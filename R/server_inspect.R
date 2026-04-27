@@ -1,33 +1,52 @@
 #' Plate Inspection Screen Server Logic
 #'
-#' Manages interactive inspection, labeling, and visualization of wells.
+#' Provides interactive tools for inspecting, labeling, and visualizing plate wells.
+#' Supports dynamic grouping, brushing-based selection, and real-time label assignment.
 #'
 #' @param input Shiny input object
 #' @param output Shiny output object
 #' @param session Shiny session object
-#' @param state ReactiveValues object storing application state
-#' @param plates Reactive object containing plate data
+#' @param state ReactiveValues object storing application state across screens
+#' @param plates Reactive expression returning a named list of plate data frames
 #'
 #' @details
-#' This server function handles:
-#' - Updating plate selection choices
-#' - Rendering the interactive plate layout
-#' - Allowing users to select wells via brushing
-#' - Assigning and storing well labels (blank, control, standard, normal)
-#' - Ensuring proper group visualizations
+#' This module implements the full plate inspection workflow:
 #'
-#' Reactive outputs include:
-#' - `plate_preview` plot of wells
-#' - Well selection metadata for downstream normalization
+#' **Core responsibilities**
+#' - Plate selection and navigation
+#' - Interactive plate visualization (ggplot-based)
+#' - Brush-based well selection
+#' - Assignment of well types:
+#'   * Standard (with concentration + units)
+#'   * Blank
+#'   * Control
+#'   * Custom labels
+#' - Multi-group visualization via geometric slicing of wells
+#' - Dynamic legend generation for standards
 #'
-#' @return NULL; updates `state` and plate metadata reactively
+#' **Visualization features**
+#' - Split rendering for wells belonging to multiple groups
+#' - Pattern overlays for blanks and controls
+#' - Dynamic color palette generation
+#' - Row/column headers for plate layout readability
+#'
+#' **Reactive outputs**
+#' - `plate_preview`: interactive plate plot
+#' - `standard_legend`: UI legend for standard concentrations
+#'
+#' **State updates**
+#' - Updates `plates()` reactive dataset in-place
+#' - Stores per-plate plots in `state$inspect_plots`
+#' - Stores legend UI in `state$standard_legend`
+#'
+#' @return NULL (all outputs are reactive side effects)
 #'
 #' @seealso inspect_ui
 #' @family Server Screens
 
 server_inspect <- function(input, output, session, state, plates) {
 
-  # --- Select Plate ---
+  # --- Plate selection initialization ---
   observeEvent(state$screen, {
     req(state$screen == "inspect")
     req(length(plates()) > 0)
@@ -39,16 +58,19 @@ server_inspect <- function(input, output, session, state, plates) {
     )
   })
 
-  # --- Plotting ---
+  # --- Core reactive plot builder ---
   inspect_plot_reactive <- reactive({
+
     req(input$active_plate)
     validate(
-      need(input$active_plate %in% names(plates()), "Invalid plate selection")
+      need(input$active_plate %in% names(plates()),
+           "Invalid plate selection")
     )
 
     plate <- plates()[[input$active_plate]]
 
-    # --- Expand wells into groups ---
+    # --- Expand wells into display groups ---
+    # Each well may belong to multiple categories (control, blank, label, etc.)
     expanded_plate <- plate %>%
       mutate(
         group = purrr::pmap(
@@ -64,6 +86,7 @@ server_inspect <- function(input, output, session, state, plates) {
               blanks
 
             } else if (is_standard && !is.na(standards)) {
+              # Standard formatting with optional units
               if (!is.na(standard_units) && standard_units != "") {
                 paste0("STD__", standards, " ", standard_units)
               } else {
@@ -81,28 +104,29 @@ server_inspect <- function(input, output, session, state, plates) {
       ) %>%
       tidyr::unnest(group)
 
-    # Factor rows
-    row_levels <- sort(unique(plate$row))  # from FULL plate, not filtered
+    # Preserve plate row ordering (top-down display)
+    row_levels <- sort(unique(plate$row))
 
     expanded_plate <- expanded_plate %>%
       mutate(row = factor(row, levels = rev(row_levels)))
 
-    # --- Compute sub-tiles for multi-group wells ---
-    # Each well can belong to multiple groups → split it visually into slices
-    # This ensures overlapping labels are visible instead of overwritten
+    # --- Geometry splitting for multi-group wells ---
+    # Wells belonging to multiple groups are visually subdivided
     expanded_plate <- expanded_plate %>%
       group_by(row, col) %>%
       mutate(
         n_groups = n(),
         slice_id = row_number(),
-        # Horizontal splitting for normal/standard/control wells (x-axis)
+
+        # Horizontal slicing (non-blank wells)
         xmin = ifelse(is_blank,
                       col - 0.5,
                       col - 0.5 + (slice_id - 1) / n_groups),
         xmax = ifelse(is_blank,
                       col + 0.5,
                       col - 0.5 + slice_id / n_groups),
-        # Vertical splitting for blank wells (y-axis)
+
+        # Vertical slicing (blank wells)
         ymin = ifelse(is_blank,
                       as.numeric(row) - 0.5 + (slice_id - 1) / n_groups,
                       as.numeric(row) - 0.5),
@@ -112,8 +136,8 @@ server_inspect <- function(input, output, session, state, plates) {
       ) %>%
       ungroup()
 
-    # --- Dynamic label colors ---
-    # Only include wells that are actually marked standard
+    # --- Dynamic label construction ---
+    # Build full label set for color mapping
     std_labels <- plate %>%
       dplyr::filter(is_standard) %>%
       dplyr::mutate(
@@ -123,18 +147,19 @@ server_inspect <- function(input, output, session, state, plates) {
       ) %>%
       .$label
 
-    # Combine with other labels for palette
-    all_labels <- unique(c(unlist(plate$labels),
-                           unlist(plate$control_groups),
-                           unlist(plate$blanks),
-                           std_labels))
+    all_labels <- unique(c(
+      unlist(plate$labels),
+      unlist(plate$control_groups),
+      unlist(plate$blanks),
+      std_labels
+    ))
+
     all_labels <- all_labels[!is.na(all_labels) & all_labels != ""]
     if (length(all_labels) == 0) all_labels <- "dummy"
 
-    # Split labels
     other_labels <- setdiff(all_labels, std_labels)
 
-    # Standard ordering
+    # Order standards numerically for consistent gradient
     std_df <- plate %>%
       dplyr::filter(is_standard, !is.na(standards)) %>%
       dplyr::mutate(
@@ -146,14 +171,20 @@ server_inspect <- function(input, output, session, state, plates) {
       dplyr::distinct(label, standards, standards_num) %>%
       dplyr::arrange(standards_num, standards)
 
-    # Color palettes
-    cat_colors <- if (length(other_labels) > 0) setNames(scales::hue_pal()(length(other_labels)), other_labels) else c()
+    # --- Color palette construction ---
+    cat_colors <- if (length(other_labels) > 0)
+      setNames(scales::hue_pal()(length(other_labels)), other_labels)
+    else c()
+
     std_colors <- if (nrow(std_df) > 0) {
-      setNames(colorRampPalette(c("#deebf7", "#08519c"))(nrow(std_df)), std_df$label)
+      setNames(
+        colorRampPalette(c("#deebf7", "#08519c"))(nrow(std_df)),
+        std_df$label
+      )
     } else c()
+
     palette <- c(cat_colors, std_colors)
 
-    # Legend filtering
     non_std_labels <- setdiff(names(palette), std_df$label)
 
     # --- Plate dimensions ---
@@ -163,30 +194,31 @@ server_inspect <- function(input, output, session, state, plates) {
     row_levels <- sort(unique(plate$row))
     col_levels <- sort(unique(plate$col))
 
-    # Column numbers (top row)
+    # Column headers (top axis)
     col_header <- data.frame(
       row = max_row + 0.8,
       col = col_levels,
       label = col_levels
     )
 
-    # Row letters (left column)
+    # Row headers (left axis)
     row_header <- data.frame(
       row = row_levels,
       col = 0,
       label = row_levels
     )
 
-    # --- Plotting ---
+    # --- Plot construction ---
     plot <- ggplot(expanded_plate) +
-      # Base layer: all wells
+
+      # Base wells
       geom_rect(
         aes(xmin = xmin, xmax = xmax,
             ymin = ymin, ymax = ymax,
             fill = group)
       ) +
 
-      # Column headers
+      # Column labels
       geom_text(
         data = col_header,
         aes(x = col, y = row, label = label),
@@ -195,7 +227,7 @@ server_inspect <- function(input, output, session, state, plates) {
         fontface = "bold"
       ) +
 
-      # Row headers
+      # Row labels
       geom_text(
         data = row_header,
         aes(x = col, y = row, label = label),
@@ -204,10 +236,12 @@ server_inspect <- function(input, output, session, state, plates) {
         fontface = "bold"
       ) +
 
-      # Blanks
+      # Blank wells (pattern overlay)
       geom_rect_pattern(
         data = dplyr::filter(expanded_plate, is_blank),
-        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = group),
+        aes(xmin = xmin, xmax = xmax,
+            ymin = ymin, ymax = ymax,
+            fill = group),
         pattern = "circle",
         pattern_color = "grey",
         pattern_angle = 45,
@@ -215,18 +249,21 @@ server_inspect <- function(input, output, session, state, plates) {
         pattern_spacing = 0.02
       ) +
 
-      # Controls
+      # Control wells (striped pattern)
       geom_rect_pattern(
         data = dplyr::filter(expanded_plate, is_control),
-        aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = group),
+        aes(xmin = xmin, xmax = xmax,
+            ymin = ymin, ymax = ymax,
+            fill = group),
         pattern_color = "grey",
         pattern_angle = 45,
         pattern_density = 0.1,
         pattern_spacing = 0.02,
         pattern_alpha = 0.8,
-        show.legend = c(fill=TRUE, pattern=FALSE)
+        show.legend = c(fill = TRUE, pattern = FALSE)
       ) +
 
+      # Base grid overlay (well boundaries)
       geom_tile(
         data = plate,
         aes(x = col, y = row),
@@ -235,14 +272,14 @@ server_inspect <- function(input, output, session, state, plates) {
         linewidth = 1.2
       ) +
 
-      # Values
+      # Well values
       geom_text(
         aes(x = col, y = row,
             label = ifelse(is.na(value), "", value)),
         size = 3
       ) +
 
-      # Dynamic coloring
+      # Color mapping
       scale_fill_manual(
         values = palette,
         breaks = non_std_labels,
@@ -250,14 +287,12 @@ server_inspect <- function(input, output, session, state, plates) {
         na.value = "grey"
       ) +
 
-      scale_y_discrete(
-        expand = expansion(add = c(0.5, max_row * 0.15))
-      ) +  # more space on top
-      scale_x_continuous(expand = expansion(add = c(1, 1))) +  # keep symmetric padding
+      scale_y_discrete(expand = expansion(add = c(0.5, max_row * 0.15))) +
+      scale_x_continuous(expand = expansion(add = c(1, 1))) +
 
-      coord_cartesian(clip = "off") +  # prevents cropping of headers
+      coord_cartesian(clip = "off") +
 
-      # Formatting
+      # Theme styling
       theme_void() +
       theme(
         legend.position = "bottom",
@@ -271,23 +306,24 @@ server_inspect <- function(input, output, session, state, plates) {
           margin = margin(t = 8)
         )
       ) +
+
       labs(
         fill = "Label",
         caption = "Stripes indicate controls, dots indicate blanks \nGrey cells will be discarded"
       )
   })
 
+  # --- Render plate preview ---
   output$plate_preview <- renderPlot({
     p <- inspect_plot_reactive()
 
-    # save per plate
+    # Cache plot per plate for downstream use
     state$inspect_plots[[input$active_plate]] <- p
 
     p
   })
 
-  # --- Buttons ---
-  # Checkboxes mutually exclusive
+  # --- Mutually exclusive checkbox behavior ---
   observeEvent(input$mark_control, {
     if (isTRUE(input$mark_control)) {
       updateCheckboxInput(session, "mark_blank", value = FALSE)
@@ -309,8 +345,7 @@ server_inspect <- function(input, output, session, state, plates) {
     }
   })
 
-
-  # Disable next button until label applied
+  # --- Enable/disable navigation to next step ---
   observe({
     if (state$screen != "inspect") {
       shinyjs::disable("to_normalize")
@@ -333,12 +368,13 @@ server_inspect <- function(input, output, session, state, plates) {
     )
   })
 
-  # Apply label to brushed wells
+  # --- Apply labels to brushed wells ---
   observeEvent(input$apply_label, {
     req(input$plate_brush, input$active_plate)
 
-    # Prevent empty labels
-    if (!isTRUE(input$mark_standard) && (is.null(input$new_label) || input$new_label == "")) {
+    # Validate input for non-standard labels
+    if (!isTRUE(input$mark_standard) &&
+        (is.null(input$new_label) || input$new_label == "")) {
       showNotification("Label cannot be empty.", type = "error")
       return()
     }
@@ -358,25 +394,31 @@ server_inspect <- function(input, output, session, state, plates) {
     idx <- paste(plate$row, plate$col) %in%
       paste(brushed$row, brushed$col)
 
+    # --- Standard assignment ---
     if (isTRUE(input$mark_standard)) {
+
       conc <- suppressWarnings(as.numeric(input$new_label))
 
       if (is.na(conc)) {
-        showNotification("Standard labels must be numeric concentrations.", type = "error"); return() }
+        showNotification("Standard labels must be numeric concentrations.",
+                         type = "error")
+        return()
+      }
 
       plate$is_standard[idx] <- TRUE
       plate$is_blank[idx] <- FALSE
       plate$is_control[idx] <- FALSE
       plate$is_label[idx] <- FALSE
       plate$standards[idx] <- conc
-
       plate$standard_units[idx] <- input$standard_units
 
       plate$blanks[idx] <- list(character(0))
       plate$control_groups[idx] <- list(character(0))
       plate$labels[idx] <- list(character(0))
 
+      # --- Blank assignment ---
     } else if (isTRUE(input$mark_blank)) {
+
       plate$is_standard[idx] <- FALSE
       plate$is_blank[idx] <- TRUE
       plate$is_control[idx] <- FALSE
@@ -386,9 +428,14 @@ server_inspect <- function(input, output, session, state, plates) {
       plate$control_groups[idx] <- list(character(0))
       plate$labels[idx] <- list(character(0))
 
-      plate$blanks[idx] <- lapply(plate$blanks[idx], function(x) unique(c(x, input$new_label)))
+      plate$blanks[idx] <- lapply(
+        plate$blanks[idx],
+        function(x) unique(c(x, input$new_label))
+      )
 
+      # --- Control assignment ---
     } else if (isTRUE(input$mark_control)) {
+
       plate$is_standard[idx] <- FALSE
       plate$is_blank[idx] <- FALSE
       plate$is_control[idx] <- TRUE
@@ -397,9 +444,15 @@ server_inspect <- function(input, output, session, state, plates) {
       plate$blanks[idx] <- list(character(0))
       plate$standards[idx] <- list(character(0))
       plate$labels[idx] <- list(character(0))
-      plate$control_groups[idx] <- lapply(plate$control_groups[idx], function(x) unique(c(x, input$new_label)))
 
+      plate$control_groups[idx] <- lapply(
+        plate$control_groups[idx],
+        function(x) unique(c(x, input$new_label))
+      )
+
+      # --- Custom label assignment ---
     } else {
+
       plate$is_standard[idx] <- FALSE
       plate$is_blank[idx] <- FALSE
       plate$is_control[idx] <- FALSE
@@ -408,16 +461,19 @@ server_inspect <- function(input, output, session, state, plates) {
       plate$blanks[idx] <- list(character(0))
       plate$control_groups[idx] <- list(character(0))
       plate$standards[idx] <- list(character(0))
-      plate$labels[idx] <- lapply(plate$labels[idx], function(x) unique(c(x, input$new_label)))
+
+      plate$labels[idx] <- lapply(
+        plate$labels[idx],
+        function(x) unique(c(x, input$new_label))
+      )
     }
 
     plate_list[[input$active_plate]] <- plate
     plates(plate_list)
   })
 
-  # Clear Labels
+  # --- Clear labels from brushed wells ---
   observe({
-    # Only relevant on inspect screen
     if (state$screen != "inspect") {
       shinyjs::disable("clear_label")
       return()
@@ -449,7 +505,7 @@ server_inspect <- function(input, output, session, state, plates) {
     idx <- paste(plate$row, plate$col) %in%
       paste(brushed$row, brushed$col)
 
-    # Clear label + control flag
+    # Reset all label metadata
     plate$labels[idx]         <- list(character(0))
     plate$control_groups[idx] <- list(character(0))
     plate$blanks[idx]         <- list(character(0))
@@ -464,10 +520,15 @@ server_inspect <- function(input, output, session, state, plates) {
     plates(plate_list)
   })
 
-  # --- Standard Legend ---
+  # --- Standard legend helper plot ---
   make_standard_legend_plot <- function(std_vals, units = NULL) {
     req(length(std_vals) >= 2)
-    df <- data.frame(x = seq_along(std_vals), y = 1, value = sort(std_vals))
+
+    df <- data.frame(
+      x = seq_along(std_vals),
+      y = 1,
+      value = sort(std_vals)
+    )
 
     ggplot(df, aes(x = x, y = y, fill = value)) +
       geom_tile() +
@@ -483,11 +544,16 @@ server_inspect <- function(input, output, session, state, plates) {
         axis.text.x = element_text(size = 12)
       ) +
       labs(
-        title = if (!is.null(units)) paste("Standard Wells (", units[1], ")", sep="") else "Standard Wells"
+        title = if (!is.null(units))
+          paste("Standard Wells (", units[1], ")", sep = "")
+        else
+          "Standard Wells"
       )
   }
 
+  # --- Standard legend UI (HTML version) ---
   standard_legend_reactive <- reactive({
+
     req(input$active_plate)
     plate <- plates()[[input$active_plate]]
 
@@ -502,17 +568,21 @@ server_inspect <- function(input, output, session, state, plates) {
 
     legend_ui <- tags$div(
       style = "padding: 8px 12px;",
+
       tags$div(
         style = "display: flex; justify-content: space-between; align-items: center;",
         tags$strong("Standard Wells"),
-        tags$span(style = "font-size: 12px; color: grey;", if (length(units) > 0) units[1] else "")
+        tags$span(style = "font-size: 12px; color: grey;",
+                  if (length(units) > 0) units[1] else "")
       ),
+
       tags$div(
         style = paste0(
           "height: 12px; border-radius: 6px; margin: 6px 0;",
           "background: ", gradient_css, ";"
         )
       ),
+
       tags$div(
         style = "display: flex; justify-content: space-between; font-size: 12px;",
         tags$span(round(min(std_vals), 3)),
@@ -520,7 +590,7 @@ server_inspect <- function(input, output, session, state, plates) {
       )
     )
 
-    # Store in state for results server
+    # Store legend for downstream modules
     state$standard_legend[[input$active_plate]] <- legend_ui
 
     legend_ui

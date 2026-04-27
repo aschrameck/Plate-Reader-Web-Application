@@ -13,30 +13,55 @@ server_inspect(input, output, session, state, plates)
 
 \item{session}{Shiny session object}
 
-\item{state}{ReactiveValues object storing application state}
+\item{state}{ReactiveValues object storing application state across screens}
 
-\item{plates}{Reactive object containing plate data}
+\item{plates}{Reactive expression returning a named list of plate data frames}
 }
 \value{
-NULL; updates \code{state} and plate metadata reactively
+NULL (all outputs are reactive side effects)
 }
 \description{
-Manages interactive inspection, labeling, and visualization of wells.
+Provides interactive tools for inspecting, labeling, and visualizing plate wells.
+Supports dynamic grouping, brushing-based selection, and real-time label assignment.
 }
 \details{
-This server function handles:
+This module implements the full plate inspection workflow:
+
+\strong{Core responsibilities}
 \itemize{
-\item Updating plate selection choices
-\item Rendering the interactive plate layout
-\item Allowing users to select wells via brushing
-\item Assigning and storing well labels (blank, control, standard, normal)
-\item Ensuring proper group visualizations
+\item Plate selection and navigation
+\item Interactive plate visualization (ggplot-based)
+\item Brush-based well selection
+\item Assignment of well types:
+\itemize{
+\item Standard (with concentration + units)
+\item Blank
+\item Control
+\item Custom labels
+}
+\item Multi-group visualization via geometric slicing of wells
+\item Dynamic legend generation for standards
 }
 
-Reactive outputs include:
+\strong{Visualization features}
 \itemize{
-\item \code{plate_preview} plot of wells
-\item Well selection metadata for downstream normalization
+\item Split rendering for wells belonging to multiple groups
+\item Pattern overlays for blanks and controls
+\item Dynamic color palette generation
+\item Row/column headers for plate layout readability
+}
+
+\strong{Reactive outputs}
+\itemize{
+\item \code{plate_preview}: interactive plate plot
+\item \code{standard_legend}: UI legend for standard concentrations
+}
+
+\strong{State updates}
+\itemize{
+\item Updates \code{plates()} reactive dataset in-place
+\item Stores per-plate plots in \code{state$inspect_plots}
+\item Stores legend UI in \code{state$standard_legend}
 }
 }
 \seealso{

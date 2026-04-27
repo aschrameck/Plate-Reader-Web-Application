@@ -1,41 +1,63 @@
 #' Analysis Screen Server Logic
 #'
-#' Handles statistical analysis of normalized plate data.
+#' Provides statistical analysis and validation tools for normalized plate data.
+#' Supports hypothesis testing, visualization selection, and pre-analysis validation.
 #'
 #' @param input Shiny input object
 #' @param output Shiny output object
 #' @param session Shiny session object
-#' @param state ReactiveValues object storing application state
-#' @param plates Reactive object containing normalized plate data
-#' @param group_map Optional mapping of wells to groups
+#' @param state ReactiveValues object storing global application state
+#' @param plates Reactive expression containing plate-level metadata
+#' @param normalized_data Reactive expression providing normalized plate values
 #'
 #' @details
-#' Provides configurable statistical analyses:
-#' - One-way ANOVA across groups
-#' - Pairwise t-tests
-#' - Outlier detection and flagging
+#' This module manages the analysis configuration and validation pipeline prior to
+#' statistical execution.
 #'
-#' Users can select:
-#' - Plate to analyze
-#' - Analysis method and parameters
+#' **Core responsibilities**
+#' - Plate selection and persistence of user settings
+#' - Storage of per-plate analysis and visualization preferences
+#' - Validation of statistical assumptions and requirements
+#' - Dynamic UI feedback (errors and warnings)
+#' - Enable/disable progression based on readiness
 #'
-#' Reactive outputs include plots, summaries, and statistical test results.
+#' **Supported analyses**
+#' - T-test (Pairwise and Control vs Treatment)
+#' - One-way ANOVA (multi-group comparison)
+#' - Outlier detection (IQR-based warnings)
 #'
-#' @return NULL; updates analysis results reactively
+#' **Supported visualizations**
+#' - Boxplot
+#' - Bar chart
+#' - Standard curve regression plot
+#'
+#' **Validation logic**
+#' The module checks:
+#' - Minimum number of groups
+#' - Presence of required controls (for t-tests)
+#' - Minimum replicates per group
+#' - Adequacy of data for standard curve fitting
+#'
+#' **State persistence**
+#' - Stores per-plate checkbox selections in `state$analysis_selections`
+#' - Restores selections when revisiting analysis screen
+#' - Propagates final selections to downstream workflow (`state`)
+#'
+#' @return NULL (all outputs are reactive side effects)
 #'
 #' @seealso analysis_ui
 #' @family Server Screens
 
 server_analysis <- function(input, output, session, state, plates, normalized_data) {
 
-  # Initialize persistent per-plate selections
+  # --- Initialize persistent selection storage ---
   observeEvent(TRUE, {
     if (is.null(state$analysis_selections)) {
       state$analysis_selections <- list()
     }
   }, once = TRUE)
 
-  # Plate selector (runs when page is opened)
+  # --- Plate selection initialization ---
   observeEvent(state$screen, {
 
     req(state$screen == "analysis")
@@ -59,7 +81,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
 
   }, ignoreInit = FALSE)
 
-  # Restore saved checkboxes whenever: user navigates to analysis page or plate changes
+  # --- Restore saved selections when entering screen or switching plates ---
   observeEvent(
     list(state$screen, input$analysis_plate),
     {
@@ -89,7 +111,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
     ignoreInit = FALSE
   )
 
-  # Save analysis selections whenever changed
+  # --- Persist analysis type selections per plate ---
   observeEvent(input$analysis_types, {
 
     req(input$analysis_plate)
@@ -97,14 +119,12 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
     state$analysis_selections[[input$analysis_plate]] <-
       modifyList(
         state$analysis_selections[[input$analysis_plate]] %||% list(),
-        list(
-          analysis_types = input$analysis_types
-        )
+        list(analysis_types = input$analysis_types)
       )
 
   }, ignoreInit = TRUE)
 
-  # Save visualization selections whenever changed
+  # --- Persist visualization selections per plate ---
   observeEvent(input$viz_types, {
 
     req(input$analysis_plate)
@@ -112,14 +132,12 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
     state$analysis_selections[[input$analysis_plate]] <-
       modifyList(
         state$analysis_selections[[input$analysis_plate]] %||% list(),
-        list(
-          viz_types = input$viz_types
-        )
+        list(viz_types = input$viz_types)
       )
 
   }, ignoreInit = TRUE)
 
-  # --- Analysis checks ---
+  # --- Pre-analysis validation checks ---
   analysis_checks <- reactive({
 
     req(input$analysis_plate)
@@ -127,6 +145,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
 
     msgs <- list(errors = character(0), warnings = character(0))
 
+    # Filter data for selected plate and relevant roles
     df <- normalized_data() %>%
       dplyr::filter(
         plate == input$analysis_plate,
@@ -140,6 +159,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
         )
       )
 
+    # Build control grouping labels for plotting consistency
     control_labels <- df %>%
       dplyr::filter(role == "control") %>%
       dplyr::group_by(row, col) %>%
@@ -164,6 +184,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
       ) %>%
       dplyr::distinct(plate, row, col, plot_group, .keep_all = TRUE)
 
+    # Non-standard observations used for statistical checks
     non_std <- df %>%
       dplyr::filter(role %in% c("normal", "control"))
 
@@ -178,7 +199,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
     selected_tests <- input$analysis_types %||% character(0)
     selected_viz   <- input$viz_types %||% character(0)
 
-    # ---- T-test ----
+    # --- T-test validation ---
     if ("T-test (Control vs Treatment)" %in% selected_tests) {
 
       if (!has_control)
@@ -194,7 +215,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
                            "Some groups have fewer than 2 observations for T-tests.")
     }
 
-    # ---- ANOVA ----
+    # --- ANOVA validation ---
     if ("ANOVA (Multigroup)" %in% selected_tests) {
 
       if (n_groups < 3)
@@ -206,17 +227,17 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
                          "ANOVA requires at least two observations per group.")
     }
 
-    # ---- Outliers ----
+    # --- Outlier detection validation ---
     if ("Outlier Detection" %in% selected_tests) {
 
       if (any(group_sizes$n < 4))
         msgs$warnings <- c(
           msgs$warnings,
-          "Groups with fewer than 4 observations may give unreliable IQR outlier detection."
+          "Groups with fewer than 4 observations may yield unreliable IQR-based outlier detection."
         )
     }
 
-    # ---- Standard Curve ----
+    # --- Standard curve validation ---
     if ("Standard Curve" %in% selected_viz) {
 
       std_n <- sum(df$role == "standard", na.rm = TRUE)
@@ -231,13 +252,13 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
     msgs
   })
 
-  # Ready flag
+  # --- Readiness flag for downstream navigation ---
   analysis_ready <- reactive({
     chk <- analysis_checks()
     length(chk$errors) == 0
   })
 
-  # Show messages
+  # --- Render validation messages in UI ---
   output$analysis_messages <- renderUI({
 
     chk <- analysis_checks()
@@ -262,7 +283,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
     )
   })
 
-  # Enable / disable next button
+  # --- Enable/disable navigation based on validation state ---
   observe({
 
     if (state$screen != "analysis") {
@@ -278,7 +299,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
     )
   })
 
-  # Select all toggle
+  # --- Select/Deselect all options toggle ---
   observeEvent(input$analysis_select_all, {
 
     updateCheckboxGroupInput(
@@ -307,7 +328,7 @@ server_analysis <- function(input, output, session, state, plates, normalized_da
 
   })
 
-  # Save final selections when moving forward
+  # --- Persist final selections before navigating forward ---
   observeEvent(input$to_results, {
     state$viz_types <- input$viz_types
     state$analysis_types <- input$analysis_types
