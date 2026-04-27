@@ -278,7 +278,7 @@ app_server <- function(input, output, session) {
           var el = $(window.guideMatches[window.guideIndex]);
           el.addClass('guide-mark-active');
 
-          // 🔥 FIXED SCROLL (always to active)
+          // FIXED SCROLL (always to active)
           setTimeout(function() {
             var container = $('.modal-body');
 
@@ -499,16 +499,16 @@ app_server <- function(input, output, session) {
                       tags$li(tags$b("Statistical Analysis:"), " Tables and test results"),
                       tags$li(tags$b("Full Report:"), " Combined methods, figures, and tables")
                     ),
+
+                    tags$h4(tags$b("Example:"), " Boxplot"),
+                    tags$div(class="guide-img", tags$img(src="guide/Box-Plot.png")),
+
+                    tags$h4(tags$b("Example:"), " Bar Chart"),
+                    tags$div(class="guide-img", tags$img(src="guide/Bar-Chart.png")),
+
+                    tags$h4(tags$b("Example:"), " Standard Curve"),
+                    tags$div(class="guide-img", tags$img(src="guide/Standard-Curve.png"))
                 ),
-
-                tags$h4(tags$b("Example:"), " Boxplot"),
-                tags$div(class="guide-img", tags$img(src="guide/Box-Plot.png")),
-
-                tags$h4(tags$b("Example:"), " Bar Chart"),
-                tags$div(class="guide-img", tags$img(src="guide/Bar-Chart.png")),
-
-                tags$h4(tags$b("Example:"), " Standard Curve"),
-                tags$div(class="guide-img", tags$img(src="guide/Standard-Curve.png")),
 
                 tags$hr(),
 

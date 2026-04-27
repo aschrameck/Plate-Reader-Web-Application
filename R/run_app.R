@@ -36,6 +36,8 @@
 #' @export
 
 run_plate_reader_app <- function() {
+  shiny::addResourcePath("guide", "www/guide")
+
   shiny::shinyApp(
     ui = main_ui(),
     server = app_server

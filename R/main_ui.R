@@ -114,6 +114,10 @@ main_ui <- function() {
         max-width: 95vw !important;
       }
 
+      .modal-body {
+        overflow: hidden;
+      }
+
       /* Layout */
       .guide-container {
         display: flex;
@@ -155,9 +159,20 @@ main_ui <- function() {
         cursor: pointer;
       }
 
-      /* Screenshot formatting */
+      /* Wrapper */
       .guide-img {
         width: 100%;
+        margin: 15px 0;
+        text-align: center;
+      }
+
+      /* Actual image */
+      .guide-img img {
+        max-width: 100%;
+        height: auto;
+        max-height: 60vh;   /* prevents giant images */
+        object-fit: contain;
+
         border-radius: 8px;
         box-shadow: 0 2px 10px rgba(0,0,0,0.08);
       }
