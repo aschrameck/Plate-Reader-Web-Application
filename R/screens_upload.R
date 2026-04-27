@@ -19,6 +19,7 @@
 
 upload_ui <- function() {
   tagList(
+    # Upload button
     tags$head(
       tags$style(HTML("
         .upload-wrapper .progress {
@@ -41,6 +42,7 @@ upload_ui <- function() {
       "))
     ),
 
+    # ---- Upload + Headers Checkbox + Next Button ----
     fluidRow(
       column(
         width = 8,

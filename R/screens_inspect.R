@@ -22,7 +22,7 @@
 inspect_ui <- function() {
   tagList(
 
-    # ---- Top Row (Controls + Plot) ----
+    # ---- Top Card: Controls + Plot ----
     fluidRow(
       class = "align-items-stretch",  # equal height columns
 
@@ -108,10 +108,9 @@ inspect_ui <- function() {
       )
     ),
 
-    # Small spacing instead of big break
     div(class = "mt-3"),
 
-    # ---- Bottom Navigation Row ----
+    # ---- Bottom Card: Navigation ----
     fluidRow(
       column(
         width = 12,

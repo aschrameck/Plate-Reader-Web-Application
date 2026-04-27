@@ -28,7 +28,7 @@ The server manages:
 \item \code{state$screen}: Tracks the current active screen
 \item Controls navigation flow between:
 \itemize{
-\item Upload → Inspect → Normalize → Results
+\item Upload → Inspect → Normalize → Analysis → Results
 }
 }
 

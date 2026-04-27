@@ -22,7 +22,8 @@ user interface and server logic, connecting all workflow stages:
 \item Upload raw plate reader data
 \item Inspect and label wells
 \item Normalize data across groups
-\item Perform statistical analysis and view results
+\item Perform statistical analysis
+\item Download results
 }
 
 \strong{Architecture}

@@ -1,6 +1,6 @@
 #' Normalization Screen UI
 #'
-#' Provides controls for configuring and previewing normalization of plate data.
+#' Provides controls for downloading normalized plate data.
 #'
 #' @details
 #' Normalization is performed per group using:
@@ -9,14 +9,13 @@
 #'
 #' Users can:
 #' - Select plate for normalization
-#' - Preview normalized values
-#' - Validate group assignments before analysis
+#' - Download various formats of processed data
 #'
 #' Assumptions:
 #' - Each group may contain blank and/or control wells
 #' - If no control is present, normalization falls back to blank-corrected values
 #'
-#' @return A Shiny UI layout with normalization controls and preview outputs
+#' @return A Shiny UI layout with normalization downloads
 #'
 #' @seealso server_normalize
 #' @family UI Screens
@@ -64,7 +63,6 @@ normalize_ui <- function() {
       )
     ),
 
-    # Small spacing
     div(class = "mt-2"),
 
     # ---- Bottom Card: Navigation ----

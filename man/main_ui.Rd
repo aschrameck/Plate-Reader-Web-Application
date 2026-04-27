@@ -7,39 +7,100 @@
 main_ui()
 }
 \value{
-A \code{fluidPage} UI object for the full application
+A \code{shiny::fluidPage} object representing the complete application UI shell.
 }
 \description{
-Defines the top-level user interface for the Plate Reader Analysis app.
-This includes the global layout, navigation header, theming, and shared
-resources (CSS/JS) that apply across all screens.
+Constructs the top-level user interface for the Plate Reader Analysis app.
+This function defines the global layout, navigation/header controls, theming,
+and shared frontend resources (CSS/JavaScript) that persist across all screens.
 }
 \details{
-The UI is composed of:
+The UI is organized into the following layers:
 
-\strong{Header Section}
+\strong{1. Global Theme & Dependencies}
 \itemize{
-\item Application title
-\item Dark mode toggle
-\item User guide access icon
-\item Bug report link
-\item Step indicator and progress bar
+\item Bootswatch "Zephyr" theme via \code{{bslib}}
+\item \code{shinyjs} initialization for client-side interactivity
+\item Bootstrap Icons CDN for consistent iconography
 }
 
-\strong{Global Styling and Scripts}
+\strong{2. Header / Navigation Bar}
+A responsive horizontal layout containing:
 \itemize{
-\item Bootstrap icon integration
-\item Custom CSS for layout and user guide modal
-\item Global Selectize.js enhancements:
+\item Application title ("Plate Reader Analysis")
+\item Dark mode toggle (\code{input_dark_mode()})
+\item User Guide trigger icon (opens modal via JS → Shiny input)
+\item Bug report icon (opens external Google Form)
+\item Step label (\code{textOutput("step_label")})
+\item Progress bar (\code{uiOutput("progress_bar")})
+}
+
+\strong{3. Global Styling (CSS)}
+Custom styles applied application-wide:
+
+\emph{Selectize Enhancements}
 \itemize{
-\item Ellipsis truncation for long dropdown values
-\item Tooltip display for full text on hover
+\item Truncates long selected values with ellipsis
+\item Applies hover tooltips to reveal full text
+\item Ensures dropdown options also truncate cleanly
+}
+
+\emph{User Guide Modal Layout}
+\itemize{
+\item Expands modal width to ~95\% of viewport
+\item Uses flexbox layout for sidebar + content
+\item Scrollable content panel with fixed sidebar
+\item Responsive image scaling:
+\itemize{
+\item Max width: 100\%
+\item Max height: 60\% of viewport
+\item Maintains aspect ratio with \code{object-fit: contain}
 }
 }
 
-\strong{Dynamic Content Area}
+\emph{Search Highlighting}
 \itemize{
-\item \code{uiOutput("current_screen")} dynamically renders the active screen:
+\item \code{.guide-mark}: default highlight style
+\item \code{.guide-mark-active}: active match emphasis
+}
+
+\strong{4. Global JavaScript Behavior}
+
+\emph{Selectize Tooltip Sync}
+\itemize{
+\item Dynamically updates tooltips for:
+\itemize{
+\item Selected value
+\item Dropdown options
+}
+\item Runs on:
+\itemize{
+\item Initial page load
+\item Selection change
+\item Dropdown open
+}
+}
+
+\emph{Header Interactions}
+\itemize{
+\item User guide icon → triggers \code{input$user_guide_icon}
+\item Bug icon → opens external bug report form in new tab
+}
+
+\emph{User Guide UX Enhancements}
+\itemize{
+\item Smooth scrolling for sidebar navigation links
+\item Live search filter:
+\itemize{
+\item Filters \code{.guide-section} elements in real time
+\item Case-insensitive matching
+}
+}
+
+\strong{5. Dynamic Content Region}
+\itemize{
+\item \code{uiOutput("current_screen")} serves as the main viewport
+\item Server dynamically injects the active workflow step:
 \itemize{
 \item Upload
 \item Inspect
@@ -47,13 +108,6 @@ The UI is composed of:
 \item Analysis
 \item Results
 }
-}
-
-\strong{User Guide Modal Features}
-\itemize{
-\item Sidebar navigation with smooth scrolling
-\item Search/filter functionality
-\item Responsive layout for large content display
 }
 }
 \seealso{

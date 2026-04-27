@@ -11,7 +11,8 @@
 #' - Upload raw plate reader data
 #' - Inspect and label wells
 #' - Normalize data across groups
-#' - Perform statistical analysis and view results
+#' - Perform statistical analysis
+#' - Download results
 #'
 #' **Architecture**
 #' - `main_ui()` defines the global UI layout and shared resources
@@ -36,8 +37,10 @@
 #' @export
 
 run_plate_reader_app <- function() {
+  # Set path for user guide images
   shiny::addResourcePath("guide", "www/guide")
 
+  # Launch app
   shiny::shinyApp(
     ui = main_ui(),
     server = app_server

@@ -9,7 +9,7 @@
 #' **Application State**
 #' - `state$screen`: Tracks the current active screen
 #' - Controls navigation flow between:
-#'   - Upload → Inspect → Normalize → Results
+#'   - Upload → Inspect → Normalize → Analysis → Results
 #'
 #' **Shared Reactive Data**
 #' - `plates`: Uploaded and processed plate datasets

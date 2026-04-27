@@ -4,13 +4,13 @@
 #'
 #' @details
 #' Users can:
-#' - Choose statistical tests (e.g., ANOVA, t-test)
+#' - Choose statistical tests
 #' - Generate plots and statistical summaries
 #'
 #' Supported analyses may include:
-#' - One-way ANOVA
-#' - Pairwise t-tests
-#' - Outlier detection
+#' - Pairwise t-tests + Control vs Treatment t-tests
+#' - One-way ANOVA + Tukey Post-Hoc test
+#' - Outlier detection (1.5xIQR)
 #'
 #' Results are based on normalized values from the previous step.
 #'
@@ -90,7 +90,6 @@ analysis_ui <- function() {
       )
     ),
 
-    # Small spacing
     div(class = "mt-3"),
 
     # ---- Bottom Card: Navigation ----

@@ -15,15 +15,15 @@ Provides tools for selecting and performing statistical analysis on normalized d
 \details{
 Users can:
 \itemize{
-\item Choose statistical tests (e.g., ANOVA, t-test)
+\item Choose statistical tests
 \item Generate plots and statistical summaries
 }
 
 Supported analyses may include:
 \itemize{
-\item One-way ANOVA
-\item Pairwise t-tests
-\item Outlier detection
+\item Pairwise t-tests + Control vs Treatment t-tests
+\item One-way ANOVA + Tukey Post-Hoc test
+\item Outlier detection (1.5xIQR)
 }
 
 Results are based on normalized values from the previous step.

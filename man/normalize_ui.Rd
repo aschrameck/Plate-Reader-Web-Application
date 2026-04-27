@@ -7,10 +7,10 @@
 normalize_ui()
 }
 \value{
-A Shiny UI layout with normalization controls and preview outputs
+A Shiny UI layout with normalization downloads
 }
 \description{
-Provides controls for configuring and previewing normalization of plate data.
+Provides controls for downloading normalized plate data.
 }
 \details{
 Normalization is performed per group using:
@@ -22,8 +22,7 @@ Normalization is performed per group using:
 Users can:
 \itemize{
 \item Select plate for normalization
-\item Preview normalized values
-\item Validate group assignments before analysis
+\item Download various formats of processed data
 }
 
 Assumptions:
