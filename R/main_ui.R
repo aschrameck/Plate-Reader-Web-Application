@@ -311,7 +311,7 @@ main_ui <- function() {
 
         // Open bug report form
         $(document).on('click', '#bug_report_icon', function() {
-          window.open('https://forms.gle/egyr4C6T96c5RFfAA', '_blank');
+          window.open('https://forms.gle/odLZSkXPvjNz3aVx9', '_blank');
         });
 
         // =====================================

@@ -1,0 +1,10 @@
+name: plate-reader-app
+title:
+username: aubrey-schrameck
+account: aubrey-schrameck
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 17241647
+bundleId: 11919662
+url: https://aubrey-schrameck.shinyapps.io/plate-reader-app/
+version: 1
