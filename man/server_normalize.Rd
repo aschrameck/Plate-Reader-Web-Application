@@ -13,25 +13,49 @@ server_normalize(input, output, session, state, plates, group_map)
 
 \item{session}{Shiny session object}
 
-\item{state}{ReactiveValues object storing application state}
+\item{state}{ReactiveValues object storing global application state}
 
-\item{plates}{Reactive object containing plate data}
+\item{plates}{Reactive expression returning named list of plate data frames}
+
+\item{group_map}{Data frame mapping wells to experimental groups and roles}
 }
 \value{
-NULL; updates normalized plate values reactively
+Reactive expression of normalized data table
 }
 \description{
-Performs per-group normalization of plate data based on blanks and controls.
+Handles plate-level data normalization using blank correction and control scaling.
+Provides downloadable outputs in both analysis-friendly and external tool formats.
 }
 \details{
-Normalization workflow:
-\enumerate{
-\item Blank correction: subtracts group blank mean from all wells
-\item Control normalization: scales wells relative to group control mean
+This module implements a two-stage normalization pipeline:
+
+\strong{1. Blank correction}
+\itemize{
+\item Subtracts mean blank signal within each group
+\item Applied to all wells in the group
 }
 
-Users can preview normalized values and validate group assignments.
-Reactive outputs include normalized data tables in several formats
+\strong{2. Control normalization}
+\itemize{
+\item Uses group control mean (after blank correction) as scaling factor
+\item If no control exists, falls back to blank-corrected values
+}
+
+\strong{Supported roles}
+\itemize{
+\item normal: experimental wells
+\item control: normalization reference wells
+\item blank: background signal wells
+\item standard: calibration curve wells (excluded from normalization)
+}
+
+\strong{Outputs}
+\itemize{
+\item Normalized reactive dataset (\code{normalized_data})
+\item Multi-group structured CSV export
+\item Prism-compatible wide-format CSV export
+\item Standards regression table with linear fit
+}
 }
 \seealso{
 normalize_ui

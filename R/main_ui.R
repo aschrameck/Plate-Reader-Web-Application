@@ -104,7 +104,7 @@ main_ui <- function() {
             h2("Plate Reader Analysis", class = "m-0"),
 
             # Dark mode toggle
-            input_dark_mode(),
+            input_dark_mode(mode = "light"),
 
             # User Guide trigger icon (handled via JS → Shiny input)
             tags$span(

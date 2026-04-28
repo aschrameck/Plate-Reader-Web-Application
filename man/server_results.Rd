@@ -15,28 +15,49 @@ server_results(input, output, session, state, plates, normalized_data)
 
 \item{state}{ReactiveValues object storing application state}
 
-\item{plates}{Reactive object containing normalized/analysis-ready plate data}
+\item{plates}{Reactive expression containing processed plate data}
 
-\item{normalized_data}{Processed values}
+\item{normalized_data}{Reactive expression of normalized plate values}
 }
 \value{
-NULL; reactive outputs and downloads are handled within
+NULL (all outputs handled via reactive side effects)
 }
 \description{
-Displays and exports final analysis results.
+Provides visualization, statistical summaries, and export functionality for
+normalized plate analysis results.
 }
 \details{
-This server function provides:
+This module generates the final analysis outputs for a plate experiment,
+including:
+
+\strong{Data processing}
 \itemize{
-\item Reactive visualization of analysis results
-\item Tables summarizing group statistics
-\item Export functionality with correct formatting
+\item Selection of active plate dataset
+\item Merging normalized values with experimental metadata
+\item Group-level labeling of control and treatment conditions
 }
 
-Users can:
+\strong{Visual outputs}
 \itemize{
-\item Download processed data
-\item Review group-level results visually and in tables
+\item Boxplots of group distributions
+\item Bar charts with mean ± SE and significance annotations
+\item Standard calibration curves (linear regression)
+\item Plate layout visualization (if available from inspection stage)
+}
+
+\strong{Statistical analysis}
+\itemize{
+\item Pairwise t-tests (with multiple testing correction)
+\item Control vs treatment comparisons
+\item One-way ANOVA
+\item Tukey post hoc tests
+\item IQR-based outlier detection
+}
+
+\strong{Exports}
+\itemize{
+\item Multi-page PDF reports of all plots and tables
+\item Full statistical analysis report
 }
 }
 \seealso{

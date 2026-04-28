@@ -13,33 +13,61 @@ server_analysis(input, output, session, state, plates, normalized_data)
 
 \item{session}{Shiny session object}
 
-\item{state}{ReactiveValues object storing application state}
+\item{state}{ReactiveValues object storing global application state}
 
-\item{plates}{Reactive object containing normalized plate data}
+\item{plates}{Reactive expression containing plate-level metadata}
 
-\item{group_map}{Optional mapping of wells to groups}
+\item{normalized_data}{Reactive expression providing normalized plate values}
 }
 \value{
-NULL; updates analysis results reactively
+NULL (all outputs are reactive side effects)
 }
 \description{
-Handles statistical analysis of normalized plate data.
+Provides statistical analysis and validation tools for normalized plate data.
+Supports hypothesis testing, visualization selection, and pre-analysis validation.
 }
 \details{
-Provides configurable statistical analyses:
+This module manages the analysis configuration and validation pipeline prior to
+statistical execution.
+
+\strong{Core responsibilities}
 \itemize{
-\item One-way ANOVA across groups
-\item Pairwise t-tests
-\item Outlier detection and flagging
+\item Plate selection and persistence of user settings
+\item Storage of per-plate analysis and visualization preferences
+\item Validation of statistical assumptions and requirements
+\item Dynamic UI feedback (errors and warnings)
+\item Enable/disable progression based on readiness
 }
 
-Users can select:
+\strong{Supported analyses}
 \itemize{
-\item Plate to analyze
-\item Analysis method and parameters
+\item T-test (Pairwise and Control vs Treatment)
+\item One-way ANOVA (multi-group comparison)
+\item Outlier detection (IQR-based warnings)
 }
 
-Reactive outputs include plots, summaries, and statistical test results.
+\strong{Supported visualizations}
+\itemize{
+\item Boxplot
+\item Bar chart
+\item Standard curve regression plot
+}
+
+\strong{Validation logic}
+The module checks:
+\itemize{
+\item Minimum number of groups
+\item Presence of required controls (for t-tests)
+\item Minimum replicates per group
+\item Adequacy of data for standard curve fitting
+}
+
+\strong{State persistence}
+\itemize{
+\item Stores per-plate checkbox selections in \code{state$analysis_selections}
+\item Restores selections when revisiting analysis screen
+\item Propagates final selections to downstream workflow (\code{state})
+}
 }
 \seealso{
 analysis_ui
