@@ -143,77 +143,98 @@ server_normalize <- function(input, output, session, state, plates, group_map) {
     filename = function() paste0(input$normalize_plate, "_processed_data.csv"),
     content = function(file) {
 
-      df <- normalized_data() %>%
-        dplyr::filter(role != "standard")
+      tryCatch({
 
-      groups <- unique(df$group)
-      group_tables <- list()
+        df <- normalized_data() %>%
+          dplyr::filter(role != "standard")
 
-      for (grp in groups) {
+        req(nrow(df) > 0)
 
-        sub <- df %>% dplyr::filter(group == grp)
+        groups <- unique(df$group)
+        group_tables <- list()
 
-        normal  <- sub$normalized_value[sub$role == "normal"]
-        control <- sub$normalized_value[sub$role == "control"]
-        blank   <- sub$value[sub$role == "blank"]
-
-        n <- max(length(normal), length(control), length(blank))
-
-        # Align columns for tabular export
-        tbl <- tibble::tibble(
-          Normal  = c(normal,  rep("", n - length(normal))),
-          Control = c(control, rep("", n - length(control))),
-          Blank   = c(blank,   rep("", n - length(blank)))
-        )
-
-        # Group-level summary statistics
-        blank_mean_val   <- unique(df$blank_mean[!is.na(sub$blank_mean)])[1]
-        control_mean_val <- unique(df$control_mean[!is.na(sub$control_mean)])[1]
-
-        summary_rows <- tibble::tibble(
-          Normal = c(
-            "",
-            paste0("Blank mean: ", round(blank_mean_val, 4)),
-            paste0("Control mean: ", round(control_mean_val, 4))
-          ),
-          Control = "",
-          Blank = ""
-        )
-
-        # Group header row
-        header <- tibble::tibble(
-          Normal = paste0("Group: ", grp),
-          Control = "",
-          Blank = ""
-        )
-
-        # Column labels row
-        colnames_row <- tibble::tibble(
-          Normal = "Normal",
-          Control = "Control",
-          Blank = "Blank"
-        )
-
-        group_tables[[grp]] <- dplyr::bind_rows(
-          header,
-          colnames_row,
-          tbl,
-          summary_rows
-        )
-      }
-
-      # Combine groups horizontally with spacer columns
-      final_tbl <- group_tables[[1]]
-
-      if (length(group_tables) > 1) {
-        for (i in 2:length(group_tables)) {
-          spacer <- tibble::tibble(` ` = rep("", nrow(final_tbl)))
-          final_tbl <- cbind(final_tbl, spacer, group_tables[[i]])
+        safe_val <- function(x) {
+          if (is.null(x) || all(is.na(x))) return("")
+          round(x[1], 4)
         }
-      }
 
-      colnames(final_tbl) <- NULL
-      write.csv(final_tbl, file, row.names = FALSE, na = "")
+        for (grp in groups) {
+
+          sub <- df %>% dplyr::filter(group == grp)
+
+          normal  <- sub$normalized_value[sub$role == "normal"]
+          control <- sub$normalized_value[sub$role == "control"]
+          blank   <- sub$value[sub$role == "blank"]
+
+          n <- max(length(normal), length(control), length(blank), 1)
+
+          tbl <- tibble::tibble(
+            Normal  = c(normal,  rep("", n - length(normal))),
+            Control = c(control, rep("", n - length(control))),
+            Blank   = c(blank,   rep("", n - length(blank)))
+          )
+
+          blank_mean_val   <- safe_val(unique(sub$blank_mean))
+          control_mean_val <- safe_val(unique(sub$control_mean))
+
+          summary_rows <- tibble::tibble(
+            Normal = c(
+              "",
+              paste0("Blank mean: ", blank_mean_val),
+              paste0("Control mean: ", control_mean_val)
+            ),
+            Control = "",
+            Blank = ""
+          )
+
+          header <- tibble::tibble(
+            Normal = paste0("Group: ", grp),
+            Control = "",
+            Blank = ""
+          )
+
+          colnames_row <- tibble::tibble(
+            Normal = "Normal",
+            Control = "Control",
+            Blank = "Blank"
+          )
+
+          group_tables[[grp]] <- dplyr::bind_rows(
+            header,
+            colnames_row,
+            tbl,
+            summary_rows
+          )
+        }
+
+        # --- FIX: equalize row counts before cbind ---
+        max_rows <- max(sapply(group_tables, nrow))
+
+        pad_rows <- function(df, n) {
+          if (nrow(df) < n) {
+            df[(nrow(df) + 1):n, ] <- ""
+          }
+          df
+        }
+
+        group_tables <- lapply(group_tables, pad_rows, n = max_rows)
+
+        final_tbl <- group_tables[[1]]
+
+        if (length(group_tables) > 1) {
+          for (i in 2:length(group_tables)) {
+            spacer <- tibble::tibble(` ` = rep("", max_rows))
+            final_tbl <- cbind(final_tbl, spacer, group_tables[[i]])
+          }
+        }
+
+        colnames(final_tbl) <- NULL
+        write.csv(final_tbl, file, row.names = FALSE, na = "")
+
+      }, error = function(e) {
+        message("download_csv error: ", e$message)
+        stop("Download failed. Check server logs for details.")
+      })
     }
   )
 
