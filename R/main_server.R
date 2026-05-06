@@ -343,8 +343,19 @@ app_server <- function(input, output, session) {
                     ),
 
                     tags$h4("How-To Video"),
-                    tags$div(class="guide-video", "[Embed tutorial video here]")
-                ),
+                    tags$div(
+                      class = "guide-video",
+                      tags$video(
+                        width = "100%",
+                        controls = NA,
+                        preload = "metadata",
+                        tags$source(
+                          src = "guide/How-To-Video-optimized.mp4",
+                          type = "video/mp4"
+                        ),
+                        "Your browser does not support the video tag."
+                      )
+                    ),
 
                 tags$hr(),
 
@@ -531,7 +542,7 @@ app_server <- function(input, output, session) {
                     tags$h4("Why is there no standard curve?"),
                     tags$p("At least two standard values are required.")
                 )
-
+                )
             )
         )
       )
